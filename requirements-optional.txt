@@ -1,0 +1,3 @@
+# Optional: when installed, the workflow uses LangGraph. Without it, the app
+# falls back to the built-in sequential executor.
+langgraph>=0.1.0

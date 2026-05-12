@@ -1,0 +1,64 @@
+direction_id: product_competitive_analysis
+name: 产品竞争分析
+description: 对某产品开展系统性的竞争分析。
+entry:
+  scenario_id: market_trend_analysis
+  skill_id: product_competitive_skill
+  user_intent_examples:
+    - 请对片仔癀开展系统性的竞争分析
+    - 请比较达仁堂某产品和主要竞品的市场表现
+source_prompts:
+  router_prompt: conf/指令选择Prompt.txt
+  workflow_instruction_set: conf/黑板 - Agent X - 行研指令集 Consolidated Rev 0506.txt
+router_methodology:
+  role: Deep Research Router
+  routing_goal: 将用户问题转为研究级范围，拆分为非重叠子问题，并为每个子问题选择一个最合适的分析模块。
+  selected_modules:
+    - module_id: G2
+      use_for: 竞品、产品、渠道、价格带、卖点和增长信号的横向对比。
+    - module_id: G7
+      use_for: 目标产品、竞品、渠道、客户、供应链和品牌资产之间的实体关系映射。
+    - module_id: G10
+      use_for: 解释竞争结果形成原因，识别驱动因素和约束因素。
+    - module_id: G3
+      use_for: 当证据不足以直接结论时，基于已验证事实进行有限推理。
+blackboard_instruction_templates:
+  - 对比
+  - 归因
+  - 推理
+workflow:
+  - step_id: scope
+    name: 竞争范围界定
+    output: 目标产品、目标市场、竞品集合、比较边界。
+  - step_id: evidence
+    name: 证据检索与反思补证
+    output: 产品、竞品、渠道、增长、反馈、价格和关系实体证据。
+  - step_id: compare
+    name: 竞争维度对比
+    output: 结构化对比表。
+  - step_id: explain
+    name: 差异化与因果解释
+    output: 优势、短板、壁垒、风险和原因。
+  - step_id: summarize
+    name: 有效总结
+    output: 可用于决策的结论、下一步验证动作。
+required_evidence:
+  - competitor_signal
+  - sales_or_growth_signal
+  - channel_signal
+  - market_feedback
+reflection_policy:
+  max_iterations: 3
+  min_new_docs_per_iteration: 1
+  stop_when:
+    - 竞品、渠道、增长、反馈四类证据覆盖率达到75%以上。
+    - 连续一轮没有新增关联实体或新增语料。
+    - 已达到最大反思轮次。
+output_contract:
+  style: 分类表格 + 有效总结
+  sections:
+    - competitive_scope
+    - comparison_matrix
+    - differentiation
+    - competitive_summary
+  citation_label: title

@@ -1,0 +1,94 @@
+scenario_id: market_trend_analysis
+name: 市场行情分析
+description: >-
+  预置行业分析入口。当前对用户开放产品竞争分析、产品技术趋势研究两个分析方向。
+analysis_directions:
+  - direction_id: product_competitive_analysis
+    name: 产品竞争分析
+    description: 对某产品开展系统性的竞争分析。
+    skill_id: product_competitive_skill
+    methodology_config: app/config/analysis_directions/product_competitive_analysis.yaml
+  - direction_id: product_tech_trend_research
+    name: 产品技术趋势研究
+    description: 对某产品所处的技术领域进行系统性趋势研究。
+    skill_id: tech_trend_skill
+    methodology_config: app/config/analysis_directions/product_tech_trend_research.yaml
+data_sources:
+  - type: elasticsearch
+    env:
+      url: ES_URL
+      index: ES_INDEX
+workflow_order:
+  - scenario_loader
+  - research_router
+  - query_rewriter
+  - retrieval
+  - instruction_selector
+  - reflection_agent
+  - skill_executor
+  - synthesis
+  - citation_checker
+default_route: product_competitive_skill
+reflection:
+  enabled: true
+  max_iterations: 3
+  max_entities_per_iteration: 4
+  min_new_docs_per_iteration: 1
+  target_evidence_coverage: 0.75
+  retrieval_size_per_entity: 3
+skills:
+  market_new_product_skill:
+    name: 新品表现分析
+    description: 针对新品上市后表现、市场反响、时序趋势和原因进行分析。
+    triggers:
+      - 新品
+      - 上市
+      - 新品表现
+      - 市场反响
+      - 最近5年
+      - 近5年
+    modules:
+      - G1
+      - G4
+      - G10
+    required_evidence:
+      - product_launch
+      - market_feedback
+      - sales_or_growth_signal
+      - channel_signal
+  product_competitive_skill:
+    name: 产品竞争分析
+    description: 对某产品开展系统性的竞争分析，覆盖竞品、定位、渠道、差异化、风险和行动建议。
+    triggers:
+      - 竞争分析
+      - 竞品
+      - 竞争格局
+      - 对比
+      - 差异化
+    modules:
+      - G2
+      - G7
+      - G10
+    required_evidence:
+      - competitor_signal
+      - sales_or_growth_signal
+      - channel_signal
+      - market_feedback
+  tech_trend_skill:
+    name: 技术趋势研究
+    description: 对某产品所处技术领域进行系统性趋势研究，覆盖技术演进、驱动因素、机会和风险。
+    triggers:
+      - 技术趋势
+      - 技术路线
+      - 技术领域
+      - 趋势研究
+      - 路线图
+    modules:
+      - G4
+      - G12
+      - G96
+    required_evidence:
+      - product_launch
+      - supply_signal
+      - sales_or_growth_signal
+      - competitor_signal

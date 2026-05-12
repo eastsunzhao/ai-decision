@@ -1,0 +1,64 @@
+direction_id: product_tech_trend_research
+name: 产品技术趋势研究
+description: 对某产品所处的技术领域进行系统性趋势研究。
+entry:
+  scenario_id: market_trend_analysis
+  skill_id: tech_trend_skill
+  user_intent_examples:
+    - 请对吉利汽车所处的智能驾驶技术领域进行系统性趋势研究
+    - 请分析某产品背后的核心技术路线和未来机会
+source_prompts:
+  router_prompt: conf/指令选择Prompt.txt
+  workflow_instruction_set: conf/黑板 - Agent X - 行研指令集 Consolidated Rev 0506.txt
+router_methodology:
+  role: Deep Research Router
+  routing_goal: 将技术趋势问题拆分为范围界定、时序演进、产业关系、创新证据和趋势解释等子问题。
+  selected_modules:
+    - module_id: G4
+      use_for: 技术路线、产品发布、政策事件、产业采用的时间序列演进。
+    - module_id: G12
+      use_for: 技术上下游、供应链、应用场景和产业生态关系梳理。
+    - module_id: G96
+      use_for: 专利、技术披露、研发材料和技术创新记录的综合研究。
+    - module_id: G10
+      use_for: 解释技术趋势背后的性能、成本、政策、供给和需求驱动因素。
+blackboard_instruction_templates:
+  - 时序
+  - 归因
+  - 推理
+workflow:
+  - step_id: scope
+    name: 技术领域界定
+    output: 产品、核心技术、应用场景、上下游环节。
+  - step_id: evidence
+    name: 技术证据检索与反思补证
+    output: 技术、专利、玩家、供应链、产品发布和政策事件证据。
+  - step_id: timeline
+    name: 技术演进阶段判断
+    output: 技术阶段、关键节点、成熟度变化。
+  - step_id: drivers
+    name: 趋势驱动分析
+    output: 性能、成本、政策、供需和竞争驱动。
+  - step_id: summarize
+    name: 有效总结
+    output: 趋势方向、机会窗口、风险约束、下一步验证动作。
+required_evidence:
+  - product_launch
+  - supply_signal
+  - competitor_signal
+  - technical_innovation_signal
+reflection_policy:
+  max_iterations: 3
+  min_new_docs_per_iteration: 1
+  stop_when:
+    - 技术、玩家、供应链、演进事件四类证据覆盖率达到75%以上。
+    - 连续一轮没有新增关联实体或新增语料。
+    - 已达到最大反思轮次。
+output_contract:
+  style: 分类表格 + 有效总结
+  sections:
+    - tech_scope
+    - evolution_stage
+    - trend_drivers
+    - trend_summary
+  citation_label: title

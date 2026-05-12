@@ -1,0 +1,385 @@
+[ 列举 ]
+
+Think Step by Step. Step 1: Create One Thoughtful Paragraph to Think (T1) about the 'Research Scope (S)' Implied by the 'User Query (Q)' with Consideration to the Context of Relevant Content in the Given Reference, then Define What Qualifies as Great Research Output (in Contrast to Good Research Output). Avoid Mention Specific Reference ID in ALL the COT Steps. Step 2: Create One Thoughtful Paragraph to Think (T2) about the List of 'Referent Terms (N)' that the User Intends to Enumerate Based on (T1), then Think about How to Categorize ALL Relevant (N) into Multiple 'KEY Categories (X)' . Prioritize Proper Name for (N) IFF Applicable. Ensure the List of (N) Accurate & Complete. Be Specific & Meticulous. Avoid Overlap Between ALL (X). Step 3: Create Multiple Paragraph of 'Thoughtful Critique (C2)' on How to Revise (T2), then Revise (T2) into (T2_Rev) Based on (C2). Step 4: Output the List of (X) Based on (T2_Rev), then Output ALL (N) Per Corresponding (X). Create Succinct Sentences of Description for Each (X) and Each (N). Step 5: Create One 'P1_Outline' and One 'Thoughtful Paragraph (P1)' For Each (X). Ensure This Step and ALL Subsequent Steps are Executed for ALL (X). Do NOT Stop Until ALL (X) are Executed Until Completion. Be Specific & Meticulous. Avoid Overlap Between ALL (P1). Step 6: Create Multiple Paragraph of 'Thoughtful Critique (C3)' on How to Edit Each (P1), then Revise Each (P1) into (P1_Rev) Based on (C3). Ensure (P1_Rev) is More Accurate and Complete than the Corresponding (P1). Append Citation IDs in Square Brackets at the End of Every Sentence (Before the Final Period). IF Sentence Uses Multiple Sources, List IDs Separated by Commas. Avoid ALL Ambiguities. Step 7: Annotate the List of Verbatim Phrase (K1) that Requires Highlight in Each (P1_Rev). Use Exact Verbatim. Step 8: Create One 'Coherent & Substantive Sentence of Headline (H1)' for Each (P1_Rev). Step 9: Create Multiple Paragraph of 'Thoughtful Critique (C4)' on How to Edit Each (H1), then Revise Each (H1) into (H1_Rev) Based on (C4). Ensure (H1_Rev) is More Accurate and Complete than the Corresponding (H1). Step 10: Create One Succinct Paragraph of 'Research Conclusion (E)' to Address (S) Based on ALL Above. Step 11: Create Multiple Paragraph of 'Thoughtful Critique (C5)' on How to Edit (E) Based ONLY on the Given Reference, then Revise (E) into (E_Rev) Based on (C5). Ensure (E_Rev) is More Accurate and Complete than (E). Step 12: Annotate the List of 'Verbatim Phrase (K2)' that Deserve Highlight in (E_Rev). Use Exact Verbatim. Step 13: Create One 'Coherent & Substantive Sentence of Headline (H2)' Based on (E_Rev). Step 14: Create Multiple Paragraph of 'Thoughtful Critique (C6)' on How to Edit (H2), then Revise (H2) into (H2_Rev) Based on (C6). Ensure (H2_Rev) is More Accurate and Complete than (H2). Step 15: Create Multiple Succinct Sentence of Footnote (F) to Explain KEY Technical Terms IFF Applicable. Step 16: Create One Thoughtful Paragraph to Think (T8) about How to Create Multiple Succinct Follow-up Queries (Q8) Relevant to the User Query. Consider Both Complementary and Deeper Questions. Ensure (Q8) Can Be Sufficiently Substantiated by the Given Reference. Maximum Number of (Q8) = 5. Step 17: Output the List of (Q8) Based on (T8).
+Output in JSON Syntax:
+{
+  "COT_1": {"T1": ""},
+  "COT_2": {"T2": "", "C2": [""], "T2_Rev": ""},
+  "X": [""],
+  "X_Description": [""],
+  "Detail_Per_X": [
+    {
+      "X": "",
+      "N": [""],
+      "N_Description": [""],
+      "P1_Outline": [""],
+      "P1": "",
+      "C3": [""],
+      "P1_Rev": "",
+      "K1": [""],
+      "H1": "",
+      "C4": [""],
+      "H1_Rev": ""
+    }
+  ],
+  "E": "",
+  "C5": [""],
+  "E_Rev": "",
+  "K2": [""],
+  "H2": "",
+  "C6": [""],
+  "H2_Rev": "",
+  "F": [""],
+  "T8": "",
+  "Q8": [""]
+}
+Return ONLY Valid JSON. Do NOT Include Markdown, Comments, Explanations, or Text Outside the JSON Object. Language = 简体中文 for ALL Natural-Language Values. JSON Keys MUST Remain Exactly as Specified in the Schema.
+
+
+[ 对比 ]
+
+Think Step by Step. Step 1: Create One Thoughtful Paragraph to Think (T1) about the 'Research Scope (S)' Implied by the 'User Query (Q)' with Consideration to the Context of Relevant Content in the Given Reference, then Define What Qualifies as Great Research Output (in Contrast to Good Research Output). Avoid Mention Specific Reference ID in ALL the COT Steps.
+
+Step 2: Create One Thoughtful Paragraph to Think (T2) about the KEY Set of 'Entities (N)' that are Required for Comparison in Order to Address (S). Maximum Number of (N) = 6, i.e., Can Be Fewer than the Maximum Number IFF Applicable. Step 3: Create Multiple Paragraph of 'Thoughtful Critique (C2)' on How to Revise (T2), then Edit (T2) into (T2_Rev) Based on (C2). Ensure (T2_Rev) is More Accurate and Complete than (T2). Step 4: Output the Set of (N) and One 'Succinct Sentence of Description (N_Description)' for Each (N) Based on (T2_Rev).
+
+Step 5: Create One Thoughtful Paragraph to Think (T3) about How to Create the KEY Set of 'Categorical Dimension (X1)' Relevant to (S) that Can Be Compared Between ALL (N). Maximum Number of (X1) = 5. MUST Ensure the Set of (X1) Does NOT Overlap OR Contain Ambiguities. Be Specific & Meticulous. Step 6: Create Multiple Paragraph of 'Thoughtful Critique (C3)' on How to Revise the Set of (X1) in (T3), then Edit (T3) into (T3_Rev) Based on (C3). Consider Whether ANY (X1) Need to be Added, Merged, OR Deleted. MUST Ensure ALL (X1) of (N) Can Be Sufficiently Substantiated by the Given Reference. Step 7: Output the Set of (X1) and One 'Succinct Sentence of Description (X1_Description)' for Each (X1) Based on (T3_Rev).
+
+Step 8: Create One Thoughtful Paragraph to Think (T4) about How to Annotate the FULL Set of 'Reference ID (ID)' that are Relevant to Each (N) in Each (X1) Based on the Content in the Given Reference, then Think about How to Create 'Succinct List of Outline (P1_Outline)' for Each (N) in Each (X1) Based on the Corresponding Content in the Set of Relevant (ID). Ensure the Set of (ID) is Complete for Each (N) in Each (X1). Be Thoughtful & Exhaustive. Step 9: Output the Set of (ID) and the List of (P1_Outline) for Each (N) in Each (X1) Based on (T4).
+
+Step 10: Create One 'Thoughtful Paragraph (P1)' For Each (N) in Each (X1) Based on (T4). Ensure ALL Content Relevant to (P1_Outline) in the Given Reference is Considered and Contained in (P1). Prioritize KEY Differences Between the Set of (N) in Each (X1). Ensure This Step and ALL Subsequent Steps are Executed for Each (N) in ALL (X1) Until Completion. Do NOT Stop Until ALL (X1) are Executed. Be Specific & Meticulous. MUST Avoid Overlap OR Redundancies Between ALL (P1). Step 11: Create Multiple Paragraph of 'Thoughtful Critique (C4)' on How to Edit Each (P1), then Revise Each (P1) into (P1_Rev) Based on (C4). Ensure (P1_Rev) is More Accurate and Complete than the Corresponding (P1). Append Citation IDs in Square Brackets at the End of Every Sentence (Before the Final Period). IF Sentence Uses Multiple Sources, List IDs Separated by Commas. Avoid ALL Ambiguities. Step 12: Annotate the List of 'Verbatim Phrase (K1)' that Deserve Highlight in Each (P1_Rev). Use Exact Verbatim.
+
+Step 13: Create One Thoughtful Paragraph to Think (T5) about Whether (R1) Each (X1) Requires Further Breakdown into the Set of Multiple 'Specific Dimension (X2)', and Whether (R2) the Given Reference Contains Sufficient Content to Substantiate the Set of (X2). IFF Both (R1) and (R2) = Y, then Think about How to Create the Set of (X2) for the (X1). Ensure the Set of (X2) is Central to the (X1) and Must NOT Overlap the Other (X1). Step 14: Output the Set of (X2) and One 'Succinct Sentence of Description (X2_Description)' for the (X1) Based on (T5) IFF Both (R1) and (R2) = Y. Ensure Each (X2_Description) is Research Grade Definition, i.e., Sufficient to Clarify the Corresponding Scope of Dimensions and Avoid ALL Ambiguities.
+
+Step 15: Create One Succinct Paragraph of 'Research Conclusion (E1)' to Address (S) Based on ALL Above. Step 16: Create Multiple Paragraph of 'Thoughtful Critique (C5)' on How to Edit (E1) Based ONLY on the Given Reference, then Revise (E1) into (E1_Rev) Based on (C5). Ensure (E1_Rev) is More Accurate and Complete than (E1). Step 17: Annotate the List of 'Verbatim Phrase (K2)' that Deserve Highlight in (E1_Rev). Use Exact Verbatim. Step 18: Create One 'Coherent & Substantive Sentence of Headline (H2)' Based on (E1_Rev). Step 19: Create Multiple Paragraph of 'Thoughtful Critique (C6)' on How to Edit (H2), then Revise (H2) into (H2_Rev) Based on (C6). Ensure (H2_Rev) is More Accurate and Complete than (H2). Step 20: Create Multiple Succinct Sentence of Footnote (F1) to Explain KEY Technical Terms IFF Applicable. Step 21: Create One Thoughtful Paragraph to Think (T8) about How to Create Multiple Succinct Follow-up Queries (Q8) Relevant to the User Query. Consider Both Complementary and Deeper Questions. Ensure (Q8) Can Be Sufficiently Substantiated by the Given Reference. Maximum Number of (Q8) = 5. Step 22: Output the List of (Q8) Based on (T8).
+Output in JSON Syntax:
+{
+  "COT_1": {"T1": ""},
+  "COT_2": {"T2": "", "C2": [""], "T2_Rev": ""},
+  "N": [""],
+  "N_Description": [""],
+  "COT_3": {"T3": "", "C3": [""], "T3_Rev": ""},
+  "X1": [""],
+  "X1_Description": [""],
+  "Detail_Per_X1": [
+    {
+      "X1": "",
+      "Detail_Per_N": [
+        {
+          "N": "",
+          "COT_4": {"T4": ""},
+          "ID": [""],
+          "P1_Outline": [""],
+          "P1": "",
+          "C4": [""],
+          "P1_Rev": "",
+          "K1": [""]
+        }
+      ],
+      "COT_5": {"T5": ""},
+      "R1": "Y or N",
+      "R2": "Y or N",
+      "X2": [""],
+      "X2_Description": [""]
+    }
+  ],
+  "E1": "",
+  "C5": [""],
+  "E1_Rev": "",
+  "K2": [""],
+  "H2": "",
+  "C6": [""],
+  "H2_Rev": "",
+  "F1": [""],
+  "T8": "",
+  "Q8": [""]
+}
+Return ONLY Valid JSON. Do NOT Include Markdown, Comments, Explanations, or Text Outside the JSON Object. Language = 简体中文 for ALL Natural-Language Values. JSON Keys MUST Remain Exactly as Specified in the Schema.
+
+
+[ 时序 ]
+
+Think Step by Step. Step 1: Create One Thoughtful Paragraph to Think (T1) about the 'Research Scope (S)' Implied by the 'User Query (Q)' with Consideration to the Context of Relevant Content in the Given Reference, then Define What Qualifies as Great Research Output (in Contrast to Good Research Output). Avoid Mention Specific Reference ID in ALL the COT Steps. Step 2: Create One Thoughtful Paragraph to Think (T2) about How to Create Multiple 'KEY Categories (X)' to Contain ALL Events that are Relevant to (S) Based on (T1). Ensure Each (X) is Relevant Throughout the Entire Timeline of Event. Ensure the Combination of (X) Can Encompass ALL Relevant Events. Step 3: Create Multiple Paragraph of Thoughtful Critique (C2) on How to Revise (T2), then Revise (T2) into (T2_Rev) Based on (C2). Step 4: Output the List of (X) Based on (T2_Rev), then Create One Succinct Sentence of Description (X_Description) for Each (X). Step 5: Create One Thoughtful Paragraph to Think (T3) about How to Extract ALL 'Specific Date (D)' that are Relevant to Each (X) Based on the Given Reference. Be Thoughtful & Exhaustive. Avoid Overlap Between ALL (D) Across (X). Ensure This Step and ALL Subsequent Steps are Executed for ALL (X). Do NOT Stop Until ALL (X) are Executed Until Completion. Step 6: Create Multiple Paragraph of 'Thoughtful Critique (C3)' on How to Revise (T3), then Revise (T3) into (T3_Rev) Based on (C3). Ensure (T3_Rev) is More Accurate and Complete than (T3). Step 7: Output the List of (D) Based on (T3_Rev). Use ISO-8601 for (D). Start from More Recent Date. Step 8: Extract KEY 'Description of Events (P1)' for Each (D). Ensure the Clarity of ALL Proper Name and Referential Terms in (P1). Append Citation IDs in Square Brackets at the End of Every Sentence (Before the Final Period) in (P1). IF Sentence Uses Multiple Sources, List IDs Separated by Commas. Be Specific & Meticulous. Avoid ALL Ambiguities. Step 9: Annotate the List of Verbatim Phrase (K1) that Deserve Highlight in Each (P1). Use Exact Verbatim. Step 10: Create One Succinct Paragraph of 'Research Conclusion (E)' to Address (S) Based on ALL Above. Step 11: Create Multiple Paragraph of 'Thoughtful Critique (C6)' on How to Edit (E) Based ONLY on the Given Reference, then Revise (E) into (E_Rev) Based on (C6). Ensure (E_Rev) is More Accurate and Complete than (E). Step 12: Annotate the List of 'Verbatim Phrase (K2)' that Deserve Highlight in (E_Rev). Use Exact Verbatim. Step 13: Create One 'Coherent & Substantive Sentence of Headline (H2)' Based on (E_Rev). Step 14: Create Multiple Paragraph of 'Thoughtful Critique (C7)' on How to Edit (H2), then Revise (H2) into (H2_Rev) Based on (C7). Ensure (H2_Rev) is More Accurate and Complete than (H2). Step 15: Create Multiple Succinct Sentence of Footnote (F) to Explain KEY Technical Terms IFF Applicable. Step 16: Create One Thoughtful Paragraph to Think (T8) about How to Create Multiple Succinct Follow-up Queries (Q8) Relevant to the User Query. Consider Both Complementary and Deeper Questions. Ensure (Q8) Can Be Sufficiently Substantiated by the Given Reference. Maximum Number of (Q8) = 5. Step 17: Output the List of (Q8) Based on (T8).
+Output in JSON Syntax:
+{
+  "COT_1": {"T1": ""},
+  "COT_2": {"T2": "", "C2": [""], "T2_Rev": ""},
+  "X": [""],
+  "X_Description": [""],
+  "Detail_Per_X": [
+    {
+      "X": "",
+      "COT_3": {"T3": "", "C3": [""], "T3_Rev": ""},
+      "D": [""],
+      "P1": [""],
+      "K1": [[""]]
+    }
+  ],
+  "E": "",
+  "C6": [""],
+  "E_Rev": "",
+  "K2": [""],
+  "H2": "",
+  "C7": [""],
+  "H2_Rev": "",
+  "F": [""],
+  "T8": "",
+  "Q8": [""]
+}
+Return ONLY Valid JSON. Do NOT Include Markdown, Comments, Explanations, or Text Outside the JSON Object. Language = 简体中文 for ALL Natural-Language Values. JSON Keys MUST Remain Exactly as Specified in the Schema.
+
+
+[ 地域 ]
+
+Think Step by Step. Step 1: Create One Thoughtful Paragraph to Think (T1) about the 'Research Scope (S)' Implied by the 'User Query (Q)' with Consideration to the Context of Relevant Content in the Given Reference, then Define What Qualifies as Great Research Output (in Contrast to Good Research Output). Avoid Mention Specific Reference ID in ALL the COT Steps. Step 2: Create One Thoughtful Paragraph to Think (T2) about the Complete Set of 'Specific Geographic Names (D)' Relevant to (S), then Think about How to Categorize ALL (D) into Multiple 'Geographic Categories (X)'. Ensure ALL (D) are Specific Geographic Names (instead of Categories). Ensure ALL (D) Can Be Substantiated by the Given Reference. Avoid ALL Overlap OR Ambiguities. Step 3: Create Multiple Paragraph of Thoughtful Critique (C2) on How to Revise (T2), then Revise (T2) into (T2_Rev) Based on (C2). Step 4: Output the List of (X), and the List of (D) for Each (X) Based on (T2_Rev), then Create Succinct Sentences of Description for Each (X) and (D). Step 5: Create One 'P1_Outline' and One 'Thoughtful Paragraph (P1)' for Each (D) in Each (X) Based on the Given Reference. Ensure ALL Content Relevant to Each (D) is Captured in the Corresponding (P1) in the Context of (S). Ensure the Clarity of ALL Proper Name and Referential Terms in Each (P1). Be Specific & Meticulous. Step 6: Create Multiple Paragraph of 'Thoughtful Critique (C3)' on How to Edit Each (P1) Based ONLY on the Given Reference, then Revise Each (P1) into (P1_Rev) Based on Each (C3). Ensure Each (P1_Rev) is More Accurate and Complete than the Corresponding (P1). Append Citation IDs in Square Brackets at the End of Every Sentence (Before the Final Period). IF Sentence Uses Multiple Sources, List IDs Separated by Commas. Ensure This Step and ALL Subsequent Steps are Executed for ALL (D) in Each (X). Do NOT Stop Until ALL (D) in Each (X) are Executed Until Completion. Avoid ALL Ambiguities. Step 7: Annotate the List of Verbatim Phrase (K1) that Deserve Highlight in Each (P1_Rev). Use Exact Verbatim. Step 8: Create One 'Coherent & Substantive Sentence of Headline (H1)' for Each (P1_Rev). Step 9: Create Multiple Paragraph of 'Thoughtful Critique (C4)' on How to Edit Each (H1), then Revise Each (H1) into (H1_Rev) Based on (C4). Ensure (H1_Rev) is More Accurate and Complete than the Corresponding (H1). Step 10: Create One Succinct Paragraph of 'Research Conclusion (E)' to Address (S) Based on ALL Above. Step 11: Create Multiple Paragraph of 'Thoughtful Critique (C5)' on How to Edit (E) Based ONLY on the Given Reference, then Revise (E) into (E_Rev) Based on (C5). Ensure (E_Rev) is More Accurate and Complete than (E). Step 12: Annotate the List of 'Verbatim Phrase (K2)' that Deserve Highlight in (E_Rev). Use Exact Verbatim. Step 13: Create One 'Coherent & Substantive Sentence of Headline (H2)' Based on (E_Rev). Step 14: Create Multiple Paragraph of 'Thoughtful Critique (C6)' on How to Edit (H2), then Revise (H2) into (H2_Rev) Based on (C6). Ensure (H2_Rev) is More Accurate and Complete than (H2). Step 15: Create Multiple Succinct Sentence of Footnote (F) to Explain KEY Technical Terms IFF Applicable. Step 16: Create One Thoughtful Paragraph to Think (T8) about How to Create Multiple Succinct Follow-up Queries (Q8) Relevant to the User Query. Consider Both Complementary and Deeper Questions. Ensure (Q8) Can Be Sufficiently Substantiated by the Given Reference. Maximum Number of (Q8) = 5. Step 17: Output the List of (Q8) Based on (T8).
+Output in JSON Syntax:
+{
+  "COT_1": {"T1": ""},
+  "COT_2": {"T2": "", "C2": [""], "T2_Rev": ""},
+  "X": [""],
+  "X_Description": [""],
+  "Detail_Per_X": [
+    {
+      "X": "",
+      "D": [""],
+      "D_Description": [""],
+      "Detail_Per_D": [
+        {
+          "D": "",
+          "P1_Outline": [""],
+          "P1": "",
+          "C3": [""],
+          "P1_Rev": "",
+          "K1": [""],
+          "H1": "",
+          "C4": [""],
+          "H1_Rev": ""
+        }
+      ]
+    }
+  ],
+  "E": "",
+  "C5": [""],
+  "E_Rev": "",
+  "K2": [""],
+  "H2": "",
+  "C6": [""],
+  "H2_Rev": "",
+  "F": [""],
+  "T8": "",
+  "Q8": [""]
+}
+Return ONLY Valid JSON. Do NOT Include Markdown, Comments, Explanations, or Text Outside the JSON Object. Language = 简体中文 for ALL Natural-Language Values. JSON Keys MUST Remain Exactly as Specified in the Schema.
+
+
+[ 框架 ]
+
+Think Step by Step. Step 1: Create One Thoughtful Paragraph to Think (T1) about the 'Research Scope (S)' Implied by the 'User Query (Q)' with Consideration to the Context of Relevant Content in the Given Reference, then Define What Qualifies as Great Research Output (in Contrast to Good Research Output). Avoid Mention Specific Reference ID in ALL the COT Steps. Step 2: Create One Succinct Sentence to Think (T2) about Whether (R) User Has Specified One Specific Framework to Use. Output (R) = 'Yes (Y)' or 'No (N)'. Step 3: IF (R) = (Y), THEN Output the 'Name of the Specified Framework (M)'; IF (R) = (N), THEN Create One Thoughtful Paragraph to Think (M_Think) about Multiple 'Alternative Set of Analytic Framework (M_Set)' that are Relevant and Applicable to (S), then Think about Which One (M) in the (M_Set) is Most Applicable to Address (S). Prioritize Academic and Theoretical Framework for ALL (M_Set). Ensure the (M) Can Be Substantiated by the Given Reference. Step 4: Create One Succinct Paragraph to Think (T3) about the Theoretical Origin (Include But NOT Limited to the Author and Context of the Original and Subsequent Publication), the Analytical Structure (Both the Theoretical and the Practical Aspects), the Relevance Between (M) and (S), and the Possible Caveat and/ or Limitation for the (M), then Think about How to Create the List of 'Multiple Categorical Aspect (X)' Based on (M) to Address (S). Step 5: Create Multiple Paragraph of 'Thoughtful Critique (C3)' on How to Revise (T3), then Revise (T3) into (T3_Rev) Based on (C3). Ensure (T3_Rev) is More Accurate and Complete than (T3). Ensure (T3_Rev) Can Be Substantiated ONLY by the Given Reference. then Output the List of (X) and One 'Succinct Sentence of Description (X_Description)' for Each (X) Based on (T3_Rev). Step 6: Create One Succinct Paragraph to Think (T4) about (i) the Research Scope of Each (X), (ii) the Content in the Given Reference that are Relevant to Each (X), (iii) Propositional and Causal Relevance Between (X) and the Set of Prior (X) IFF Applicable, and (iv) the Proper Structure for One 'Succinct Paragraph (P1)' of Research Response for Each (X). Ensure This Step and ALL Subsequent Steps are Executed for ALL (X). Do NOT Stop Until ALL (X) are Executed Until Completion. Be Thoughtful & Exhaustive. Step 7: Create (P1) Based on (T4) for Each (X). Ensure ALL Relevant Content in the Given Reference are Considered for Each (P1). Be Specific & Meticulous. Step 8: Create Multiple Paragraph of Thoughtful Critique (C4) on How to Revise Each (P1), then Revise (P1) into (P1_Rev) Based on (C4). Ensure Each (P1_Rev) is More Accurate and Complete than the Corresponding (P1). Append Citation IDs in Square Brackets at the End of Every Sentence (Before the Final Period) for (P1_Rev). IF Sentence Uses Multiple Sources, List IDs Separated by Commas. Avoid ALL Ambiguities. Step 9: Annotate the List of Verbatim Phrase (K1) that Deserve Highlight in Each (P1_Rev). Use Exact Verbatim. Step 10: Create One Succinct Paragraph of 'Research Conclusion (E)' to Address (S) Based on ALL Above. Step 11: Create Multiple Paragraph of 'Thoughtful Critique (C6)' on How to Edit (E) Based ONLY on the Given Reference, then Revise (E) into (E_Rev) Based on (C6). Ensure (E_Rev) is More Accurate and Complete than (E). Step 12: Annotate the List of 'Verbatim Phrase (K2)' that Deserve Highlight in (E_Rev). Use Exact Verbatim. Step 13: Create One 'Coherent & Substantive Sentence of Headline (H2)' Based on (E_Rev). Step 14: Create Multiple Paragraph of 'Thoughtful Critique (C7)' on How to Edit (H2), then Revise (H2) into (H2_Rev) Based on (C7). Ensure (H2_Rev) is More Accurate and Complete than (H2). Step 15: Create Multiple Succinct Sentence of Footnote (F) to Explain KEY Technical Terms IFF Applicable. Step 16: Create One Thoughtful Paragraph to Think (T8) about How to Create Multiple Succinct Follow-up Queries (Q8) Relevant to the User Query. Consider Both Complementary and Deeper Questions. Ensure (Q8) Can Be Sufficiently Substantiated by the Given Reference. Maximum Number of (Q8) = 5. Step 17: Output the List of (Q8) Based on (T8).
+Output in JSON Syntax:
+{
+  "COT_1": {"T1": ""},
+  "COT_2": {
+    "T2": "",
+    "R": "Y or N",
+    "IF R = Y": {"M": ""},
+    "IF R = N": {"M_Think": "", "M_Set": [""], "M": ""}
+  },
+  "COT_3": {"T3": "", "C3": [""], "T3_Rev": ""},
+  "X": [""],
+  "X_Description": [""],
+  "Detail_Per_X": [
+    {
+      "X": "",
+      "COT_4": {"T4": ""},
+      "P1": "",
+      "C4": [""],
+      "P1_Rev": "",
+      "K1": [""]
+    }
+  ],
+  "E": "",
+  "C6": [""],
+  "E_Rev": "",
+  "K2": [""],
+  "H2": "",
+  "C7": [""],
+  "H2_Rev": "",
+  "F": [""],
+  "T8": "",
+  "Q8": [""]
+}
+Return ONLY Valid JSON. Do NOT Include Markdown, Comments, Explanations, or Text Outside the JSON Object. Language = 简体中文 for ALL Natural-Language Values. JSON Keys MUST Remain Exactly as Specified in the Schema.
+
+
+[ 归因 ]
+
+Think Step by Step. Step 1: Create One Thoughtful Paragraph to Think (T1) about the 'Research Scope (S)' Implied by the 'User Query (Q)' with Consideration to the Context of Relevant Content in the Given Reference, then Define What Qualifies as Great Research Output (in Contrast to Good Research Output). Avoid Mention Specific Reference ID in ALL the COT Steps. Step 2: Create One Thoughtful Paragraph to Think (T2) about How to Derive ALL 'Causal Chain (X)' that are Relevant to (S). Consider Both Direct and Indirect Causal Factors (e.g., Second Order Effects). Consider Non-Linear Effects and Possible Market Inefficiencies IFF Applicable. Prioritize Root Causes that are Necessary and Unique. Be Thoughtful & Exhaustive. Step 3: Create Multiple Paragraph of 'Thoughtful Critique (C2)' on How to Revise (T2), then Revise (T2) into (T2_Rev) Based on (C2). Be Thoughtful & Exhaustive. Step 4: Output the List of (X) Based on (T2_Rev), then Create One Succinct Sentence of Description (X_Description) for Each (X). Step 5: Create One 'P1_Outline' and One 'Thoughtful Paragraph (P1)' For Each (X). Ensure This Step and ALL Subsequent Steps are Executed for ALL (X). Do NOT Stop Until ALL (X) are Executed Until Completion. Be Specific & Meticulous. Avoid ALL Ambiguities. Step 6: Create Multiple Paragraph of 'Thoughtful Critique (C3)' on How to Edit Each (P1), then Revise Each (P1) into (P1_Rev) Based on (C3). Ensure ALL Propositional Statement are Substantiated with Factual Observations. Ensure (P1_Rev) is More Accurate and Complete than (P1). Append Citation IDs in Square Brackets at the End of Every Sentence (Before the Final Period) in (P1_Rev). IF Sentence Uses Multiple Sources, List IDs Separated by Commas. Step 7: Annotate the List of 'Verbatim Phrase (K1)' that Requires Highlight in Each (P1_Rev). Use Exact Verbatim. Step 8: Create One Succinct Paragraph of 'Research Conclusion (E)' to Address (S) Based on ALL Above. Step 9: Create Multiple Paragraph of 'Thoughtful Critique (C6)' on How to Edit (E) Based ONLY on the Given Reference, then Revise (E) into (E_Rev) Based on (C6). Ensure (E_Rev) is More Accurate and Complete than (E). Step 10: Annotate the List of 'Verbatim Phrase (K2)' that Deserve Highlight in (E_Rev). Use Exact Verbatim. Step 11: Create One 'Coherent & Substantive Sentence of Headline (H2)' Based on (E_Rev). Step 12: Create Multiple Paragraph of 'Thoughtful Critique (C7)' on How to Edit (H2), then Revise (H2) into (H2_Rev) Based on (C7). Ensure (H2_Rev) is More Accurate and Complete than (H2). Step 13: Create Multiple Succinct Sentence of Footnote (F) to Explain KEY Technical Terms IFF Applicable. Step 14: Create One Thoughtful Paragraph to Think (T8) about How to Create Multiple Succinct Follow-up Queries (Q8) Relevant to the User Query. Consider Both Complementary and Deeper Questions. Ensure (Q8) Can Be Sufficiently Substantiated by the Given Reference. Maximum Number of (Q8) = 5. Step 15: Output the List of (Q8) Based on (T8).
+Output in JSON Syntax:
+{
+  "COT_1": {"T1": ""},
+  "COT_2": {"T2": "", "C2": [""], "T2_Rev": ""},
+  "X": [" -> "],
+  "X_Description": [""],
+  "Detail_Per_X": [
+    {
+      "X": " -> ",
+      "P1_Outline": [""],
+      "P1": "",
+      "C3": [""],
+      "P1_Rev": "",
+      "K1": [""]
+    }
+  ],
+  "E": "",
+  "C6": [""],
+  "E_Rev": "",
+  "K2": [""],
+  "H2": "",
+  "C7": [""],
+  "H2_Rev": "",
+  "F": [""],
+  "T8": "",
+  "Q8": [""]
+}
+Return ONLY Valid JSON. Do NOT Include Markdown, Comments, Explanations, or Text Outside the JSON Object. Language = 简体中文 for ALL Natural-Language Values. JSON Keys MUST Remain Exactly as Specified in the Schema.
+
+
+[ 推理 ]
+
+Think Step by Step. Step 1: Create One Thoughtful Paragraph to Think (T1) about the 'Research Scope (S)' Implied by the 'User Query (Q)' with Consideration to the Context of Relevant Content in the Given Reference, then Define What Qualifies as Great Research Output (in Contrast to Good Research Output). Avoid Mention Specific Reference ID in ALL the COT Steps. Step 2: Create One Succinct Paragraph to Think (T2) about ALL the 'Prerequisite Research (X)' that are Required Before (S) Can Be Properly Derived. Ensure ALL (X) Can Be Executed in Parallel, i.e., NONE of the (X) Can Be Dependent on Each Other. Step 3: Create Multiple Paragraph of 'Thoughtful Critique (C2)' on How to Revise (T2), then Revise (T2) into (T2_Rev) Based on (C2). Ensure that the Set of (X) Can Be Sufficiently Substantiated by the Given Reference (Revise IF Otherwise). Output the Set of (X) Based on (T2_Rev), then Create One Succinct Sentence of Description (X_Description) for Each (X). Step 4: Create One Succinct Paragraph to Think (T3) about What Qualifies as 'Great Research Output (P1)' for Each (X). Step 5: Create 'Succinct Outline (P1_Outline)' for Each (X) Based on (T3), then Create One Thoughtful Paragraph of (P1) to Address Each (X) Based on (P1_Outline) in the Context of (S). Step 6: Create Multiple Paragraph of 'Thoughtful Critique (C3)' on How to Edit Each (P1) Based ONLY on the Given Reference, then Revise Each (P1) into (P1_Rev) Based on Each (C3). Ensure Each (P1_Rev) is More Accurate and Complete than the Corresponding (P1). Ensure ALL Relevant Factual Statement in the Given Reference are Considered. Append Citation IDs in Square Brackets at the End of Every Sentence (Before the Final Period). IF Sentence Uses Multiple Sources, List IDs Separated by Commas. Avoid ALL Ambiguities. Avoid Overlap Between ALL (P1_Rev). Step 7: Annotate the List of 'Verbatim Phrase (K1)' that Requires Highlight in Each (P1_Rev). Use Exact Verbatim. Step 8: Create Multiple Thoughtful Paragraph to Think (T4) about (i) How to Clarify the Scope of the Deduction Required to Address (S), (ii) the Specific Deductive Logic that are Required for the Deduction from ALL (X) to (S), and (iii) the Implicit Assumptions that are Required in order to Execute (T4-ii). Step 9: Create One Succinct Paragraph of 'Research Conclusion (E)' to Address (S) Based on ALL Above. Step 10: Create Multiple Paragraph of 'Thoughtful Critique (C6)' on How to Edit (E) Based ONLY on the Given Reference, then Revise (E) into (E_Rev) Based on (C6). Ensure (E_Rev) is More Accurate and Complete than (E). Step 11: Annotate the List of 'Verbatim Phrase (K2)' that Deserve Highlight in (E_Rev). Use Exact Verbatim. Step 12: Create One 'Coherent & Substantive Sentence of Headline (H2)' Based on (E_Rev). Step 13: Create Multiple Paragraph of 'Thoughtful Critique (C7)' on How to Edit (H2), then Revise (H2) into (H2_Rev) Based on (C7). Ensure (H2_Rev) is More Accurate and Complete than (H2). Step 14: Create Multiple Succinct Sentence of Footnote (F) to Explain KEY Technical Terms IFF Applicable. Step 15: Create One Thoughtful Paragraph to Think (T8) about How to Create Multiple Succinct Follow-up Queries (Q8) Relevant to the User Query. Consider Both Complementary and Deeper Questions. Ensure (Q8) Can Be Sufficiently Substantiated by the Given Reference. Maximum Number of (Q8) = 5. Step 16: Output the List of (Q8) Based on (T8).
+Output in JSON Syntax:
+{
+  "COT_1": {"T1": ""},
+  "COT_2": {"T2": "", "C2": [""], "T2_Rev": ""},
+  "X": [""],
+  "X_Description": [""],
+  "Detail_Per_X": [
+    {
+      "X": "",
+      "COT_3": {"T3": ""},
+      "P1_Outline": [""],
+      "P1": "",
+      "C3": [""],
+      "P1_Rev": "",
+      "K1": [""]
+    }
+  ],
+  "T4": {"i": "", "ii": "", "iii": ""},
+  "E": "",
+  "C6": [""],
+  "E_Rev": "",
+  "K2": [""],
+  "H2": "",
+  "C7": [""],
+  "H2_Rev": "",
+  "F": [""],
+  "T8": "",
+  "Q8": [""]
+}
+Return ONLY Valid JSON. Do NOT Include Markdown, Comments, Explanations, or Text Outside the JSON Object. Language = 简体中文 for ALL Natural-Language Values. JSON Keys MUST Remain Exactly as Specified in the Schema.
+
+
+[ 关系 ]
+
+Think Step by Step. Step 1: Create One Thoughtful Paragraph to Think (T1) about the 'Research Scope (S)' Implied by the 'User Query (Q)' with Consideration to the Context of Relevant Content in the Given Reference, then Define What Qualifies as Great Research Output (in Contrast to Good Research Output). Avoid Mention Specific Reference ID in ALL the COT Steps. Step 2: Create One Thoughtful Paragraph to Think (T2) about How to Extract the Full List of 'Entity Name (N)' Relevant to (S) Based on the Given Reference, then Think about How to Create Multiple 'Superset Categories (X) of Relation' that Can (i) Properly Categorize ALL (N), and (ii) Ensure Each (N) ONLY Exist in One Specific (X). Prioritize Specific Proper Name for (N), instead of Categorical Name. Consider Both Explicit and Implicit Relation. Avoid Overlap & Redundancies Between (X). Be Thoughtful & Exhaustive. Step 3: Create Multiple Paragraph of 'Thoughtful Critique (C2)' on How to Revise (T2), then Revise (T2) into (T2_Rev) Based on (C2). Ensure (T2_Rev) is More Accurate and Complete than (T2). Step 4: Output the List of (X), and the List of (N) for Each (X) Based on (T2_Rev), then Create One Succinct Sentence of Description (X_Description) for Each (X). Be Thoughtful & Exhaustive. Avoid ALL Ambiguities. Step 5: Create One Thoughtful Paragraph to Think (T3) about Relevant Factual Statement in the Given Reference in Order to Create One Succinct Paragraph of 'Factual Description (P1)' for Each (N) Based on the Given Reference. Ensure This Step and ALL Subsequent Steps are Executed for ALL (X). Do NOT Stop Until ALL (X) are Executed Until Completion. Be Specific & Meticulous. Avoid ALL Ambiguities. Step 6: Create Multiple Paragraph of 'Thoughtful Critique (C3)' on How to Revise (T3), then Revise (T3) into (T3_Rev) Based on (C3). Ensure (T3_Rev) is More Accurate and Complete than (T3). Step 7: Create (P1) for Each (N) Based on (T3_Rev). Prioritize Relational Aspect that are Relevant to (S) in the Paragraph of (P1), with Detailed Contextual Factual Statement Relevant to the Corresponding (N). Append Citation IDs in Square Brackets at the End of Every Sentence (Before the Final Period). IF Sentence Uses Multiple Sources, List IDs Separated by Commas. Be Specific & Meticulous. Avoid ALL Ambiguities. Step 8: Annotate the List of Verbatim Phrase (K1) that Deserve Highlight in Each (P1). Use Exact Verbatim. Step 9: Create One Succinct Paragraph of 'Research Conclusion (E)' to Address (S) Based on ALL Above. Step 10: Create Multiple Paragraph of 'Thoughtful Critique (C5)' on How to Edit (E) Based ONLY on the Given Reference, then Revise (E) into (E_Rev) Based on (C5). Ensure (E_Rev) is More Accurate and Complete than (E). Step 11: Annotate the List of 'Verbatim Phrase (K2)' that Deserve Highlight in (E_Rev). Use Exact Verbatim. Step 12: Create One 'Coherent & Substantive Sentence of Headline (H2)' Based on (E_Rev). Step 13: Create Multiple Paragraph of 'Thoughtful Critique (C6)' on How to Edit (H2), then Revise (H2) into (H2_Rev) Based on (C6). Ensure (H2_Rev) is More Accurate and Complete than (H2). Step 14: Create Multiple Succinct Sentence of Footnote (F) to Explain KEY Technical Terms IFF Applicable. Step 15: Create One Thoughtful Paragraph to Think (T8) about How to Create Multiple Succinct Follow-up Queries (Q8) Relevant to the User Query. Consider Both Complementary and Deeper Questions. Ensure (Q8) Can Be Sufficiently Substantiated by the Given Reference. Maximum Number of (Q8) = 5. Step 16: Output the List of (Q8) Based on (T8).
+Output in JSON Syntax:
+{
+  "COT_1": {"T1": ""},
+  "COT_2": {"T2": "", "C2": [""], "T2_Rev": ""},
+  "X": [""],
+  "X_Description": [""],
+  "Detail_Per_X": [
+    {
+      "X": "",
+      "N": [""],
+      "COT_3": {"T3": "", "C3": [""], "T3_Rev": ""},
+      "P1_Per_N": [""],
+      "K1_Per_P1": [[""]]
+    }
+  ],
+  "E": "",
+  "C5": [""],
+  "E_Rev": "",
+  "K2": [""],
+  "H2": "",
+  "C6": [""],
+  "H2_Rev": "",
+  "F": [""],
+  "T8": "",
+  "Q8": [""]
+}
+Return ONLY Valid JSON. Do NOT Include Markdown, Comments, Explanations, or Text Outside the JSON Object. Language = 简体中文 for ALL Natural-Language Values. JSON Keys MUST Remain Exactly as Specified in the Schema.
+
+
+[ 风险 ]
+
+Think Step by Step. Step 1: Create One Thoughtful Paragraph to Think (T1) about the 'Research Scope (S)' Implied by the 'User Query (Q)' with Consideration to the Context of Relevant Content in the Given Reference, then Define What Qualifies as Great Research Output (in Contrast to Good Research Output). Avoid Mention Specific Reference ID in ALL the COT Steps. Step 2: Create One Thoughtful Paragraph to Think (T2) about How to Extract the Full List of 'Specific Risk (N)' Relevant to (S) Based on the Given Reference, then Think about How to Create Multiple 'Superset Risk Categories (X)' that Can (i) Properly Categorize ALL (N), and (ii) Ensure Each (N) ONLY Exist in One Specific (X). Consider Both Existing and Potential Risks for (N). Avoid Overlap & Redundancies Between (X). Be Thoughtful & Exhaustive. Step 3: Create Multiple Paragraph of 'Thoughtful Critique (C2)' on How to Revise (T2), then Revise (T2) into (T2_Rev) Based on (C2). Ensure (T2_Rev) is More Accurate and Complete than (T2). Step 4: Output the List of (X), and the List of (N) for Each (X) Based on (T2_Rev), then Create One Succinct Sentence of Description (X_Description) for Each (X). Be Thoughtful & Exhaustive. Avoid ALL Ambiguities. Step 5: Create One Thoughtful Paragraph to Think (T3) about Relevant Factual Statement in the Given Reference in Order to Create One Thoughtful Paragraph of 'Factual Description (P1)', 'Magnitude Assessment (R1)', 'Timeline Assessment (R2)', and Propose 'Mitigation Approach (M)' for Each Specific (N) Based on the Given Reference. Rate (R1) by High, Medium, and Low. Rate (R2) by Short, Medium, and Long Term. Create One Succinct Sentence of Mitigation Summary (M_Succinct) for Each (M). Ensure ALL Content Relevant to Each (N) from the Given Reference is Captured in the Corresponding (P1) in the Context of (S). Ensure Each (P1), (R1), (R2), (M), and (M_Succinct) Correspond to One Specific (N). Ensure This Step and ALL Subsequent Steps are Executed for ALL (X). Do NOT Stop Until ALL (X) are Executed Until Completion. Step 6: Create Multiple Paragraph of 'Thoughtful Critique (C3)' on How to Revise (T3), then Revise (T3) into (T3_Rev) Based on (C3). Ensure (T3_Rev) is More Accurate and Complete than (T3). Step 7: Output (P1), (R1), (R2), (M), and (M_Succinct) for Each (N) Based on (T3_Rev). Append Citation IDs in Square Brackets at the End of Every Sentence (Before the Final Period) in the Paragraph of (P1). IF Sentence Uses Multiple Sources, List IDs Separated by Commas. Be Specific & Meticulous. Avoid ALL Ambiguities. Step 8: Annotate the List of Verbatim Phrase (K1) that Deserve Highlight in Each (P1). Use Exact Verbatim. Step 9: Create One Succinct Paragraph of 'Research Conclusion (E)' to Address (S) Based on ALL Above. Step 10: Create Multiple Paragraph of 'Thoughtful Critique (C6)' on How to Edit (E) Based ONLY on the Given Reference, then Revise (E) into (E_Rev) Based on (C6). Ensure (E_Rev) is More Accurate and Complete than (E). Step 11: Annotate the List of 'Verbatim Phrase (K2)' that Deserve Highlight in (E_Rev). Use Exact Verbatim. Step 12: Create One 'Coherent & Substantive Sentence of Headline (H2)' Based on (E_Rev). Step 13: Create Multiple Paragraph of 'Thoughtful Critique (C7)' on How to Edit (H2), then Revise (H2) into (H2_Rev) Based on (C7). Ensure (H2_Rev) is More Accurate and Complete than (H2). Step 14: Create Multiple Succinct Sentence of Footnote (F) to Explain KEY Technical Terms IFF Applicable. Step 15: Create One Thoughtful Paragraph to Think (T8) about How to Create Multiple Succinct Follow-up Queries (Q8) Relevant to the User Query. Consider Both Complementary and Deeper Questions. Ensure (Q8) Can Be Sufficiently Substantiated by the Given Reference. Maximum Number of (Q8) = 5. Step 16: Output the List of (Q8) Based on (T8).
+Output in JSON Syntax:
+{
+  "COT_1": {"T1": ""},
+  "COT_2": {"T2": "", "C2": [""], "T2_Rev": ""},
+  "X": [""],
+  "X_Description": [""],
+  "Detail_Per_X": [
+    {
+      "X": "",
+      "COT_3": {"T3": "", "C3": [""], "T3_Rev": ""},
+      "N": [""],
+      "P1_Per_N": [""],
+      "K1_Per_P1": [[""]],
+      "R1_Per_N": [""],
+      "R2_Per_N": [""],
+      "M_Per_N": [""],
+      "M_Succinct_Per_N": [""]
+    }
+  ],
+  "E": "",
+  "C6": [""],
+  "E_Rev": "",
+  "K2": [""],
+  "H2": "",
+  "C7": [""],
+  "H2_Rev": "",
+  "F": [""],
+  "T8": "",
+  "Q8": [""]
+}
+Return ONLY Valid JSON. Do NOT Include Markdown, Comments, Explanations, or Text Outside the JSON Object. Language = 简体中文 for ALL Natural-Language Values. JSON Keys MUST Remain Exactly as Specified in the Schema.
+
+
+[ 产业链 ]
+
+Think Step by Step. Step 1: Create One Succinct Paragraph to Think (T1) about How to Disaggregate KEY Supply Chain Component from Upstream to Downstream that are Relevant to 'User Query (Q)'. Step 2: Create Multiple Paragraph of Thoughtful Critique (C1) on How to Revise (T1), then Revise (T1) into (T1_Rev) Based on (C1). Avoid Overlap & Redundancies. Step 3: Output the Categorical Name of the 'Supply Chain Component (X)' and One 'Succinct Paragraph of Description (X_Description)' for Each (X) Based on (T1_Rev). Maximum Number of (X) = 5. Step 4: Create One Thoughtful Paragraph to Think (T2) about the List of 'Specific Company Name (N1)', 'Specific Product Name (N2)' for Each (N1), and 'Specific Technology Name (N3)' for Each (N1) Based on the Given Reference. Be Relevant to Each (X). Ensure This Step and ALL Subsequent Steps are Executed for ALL (X) Until Completion. Do NOT Stop Until ALL (X) are Executed. Be Thoughtful & Exhaustive. Step 5: Create Multiple Paragraph of Thoughtful Critique (C2) on How to Revise Each (T2), then Revise Each (T2) into (T2_Rev) Based on (C2). Avoid ALL Ambiguities. Step 6: Output the List of (N1), (N2), and (N3) Based on (T2_Rev). Step 7: Create One Thoughtful Paragraph to Think (T3) about How to Estimate the 'Market Size (N4) in RMB Billion', 'Gross Profit Margin (N5) in Percentage', and the 'Degree of Consolidation (N6) in CR4' for Each (X). Ensure the Estimates Can Be Substantiated by the Given Reference. Use Range IFF Applicable. Step 8: Create Multiple Paragraph of Thoughtful Critique (C3) on How to Revise Each (T3), then Revise Each (T3) into (T3_Rev) Based on (C3). Avoid ALL Ambiguities. Step 9: Output (N4), (N5), and (N6) Based on (T3_Rev). Step 10: Create One Thoughtful Paragraph (P1) for Each (X). Include But NOT Limited to the Characterization of Entry Barriers, KEY Successful Factors, Industry Trends, and other Shaping Issues Relevant to Each (X). Step 11: Create Multiple Paragraph of Thoughtful Critique (C4) on How to Revise Each (P1), then Revise Each (P1) into (P1_Rev) Based on (C4). Be Specific & Meticulous. Avoid ALL Ambiguities. Append Citation IDs in Square Brackets at the End of Every Sentence (Before the Final Period) in (P1_Rev). IF Sentence Uses Multiple Sources, List IDs Separated by Commas. Step 12: Annotate the List of 'Verbatim Phrase (K1)' that Requires Highlight in Each (P1_Rev). Use Exact Verbatim. Step 13: Create One Thoughtful Paragraph of 'Research Conclusion (E)' to Address (Q) Based on ALL Above. Step 14: Create Multiple Paragraph of 'Thoughtful Critique (C5)' on How to Revise (E) Based ONLY on the Given Reference, then Revise (E) into (E_Rev) Based on (C5). Step 15: Annotate the List of Verbatim Phrase (K2) that Requires Highlight in (E_Rev). Use Exact Verbatim. Step 16: Create One Coherent & Substantive Sentence of Headline (H2) Based on (E_Rev). Step 17: Create Multiple Paragraph of Thoughtful Critique (C6) on How to Revise (H2), then Revise (H2) into (H2_Rev) Based on (C6). Step 18: Create Multiple Succinct Sentence of Footnote (F) to Explain KEY Technical Terms IFF Applicable. Step 19: Create One Thoughtful Paragraph to Think (T8) about How to Create Multiple Succinct Follow-up Queries (Q8) Relevant to the User Query. Consider Both Complementary and Deeper Questions. Ensure (Q8) Can Be Sufficiently Substantiated by the Given Reference. Maximum Number of (Q8) = 5. Step 20: Output the List of (Q8) Based on (T8).
+Output in JSON Syntax:
+{
+  "COT_1": {"T1": "", "C1": [""], "T1_Rev": ""},
+  "X": [""],
+  "X_Description": [""],
+  "Detail_Per_X": [
+    {
+      "X": "",
+      "COT_2": {"T2": "", "C2": [""], "T2_Rev": ""},
+      "N1": [""],
+      "N2_Per_N1": [[""]],
+      "N3_Per_N1": [[""]],
+      "COT_3": {"T3": "", "C3": [""], "T3_Rev": ""},
+      "N4": "",
+      "N5": "",
+      "N6": "",
+      "P1": "",
+      "C4": [""],
+      "P1_Rev": "",
+      "K1": [""]
+    }
+  ],
+  "E": "",
+  "C5": [""],
+  "E_Rev": "",
+  "K2": [""],
+  "H2": "",
+  "C6": [""],
+  "H2_Rev": "",
+  "F": [""],
+  "T8": "",
+  "Q8": [""]
+}
+Return ONLY Valid JSON. Do NOT Include Markdown, Comments, Explanations, or Text Outside the JSON Object. Language = 简体中文 for ALL Natural-Language Values. JSON Keys MUST Remain Exactly as Specified in the Schema.

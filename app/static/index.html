@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Decision Agent OS</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main id="directionGate" class="direction-gate hidden">
+      <section class="gate-panel">
+        <div class="gate-kicker">AI Decision Agent OS</div>
+        <h1>请选择分析方向</h1>
+        <p>选择后进入问答工作台，系统会按对应的分析框架组织检索、反思和结构化输出。</p>
+        <div class="gate-options">
+          <button
+            type="button"
+            class="gate-card"
+            data-gate-direction="competitive"
+            data-direction-query="请对某产品开展系统性的竞争分析"
+          >
+            <span>01</span>
+            <strong>产品竞争分析</strong>
+            <small>对某产品开展系统性的竞争分析</small>
+          </button>
+          <button
+            type="button"
+            class="gate-card"
+            data-gate-direction="tech"
+            data-direction-query="请对某产品所处的技术领域进行系统性趋势研究"
+          >
+            <span>02</span>
+            <strong>产品技术趋势研究</strong>
+            <small>对某产品所处的技术领域进行系统性趋势研究</small>
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <div id="appShell" class="shell">
+      <aside class="app-rail">
+        <div class="rail-logo">AI</div>
+        <button class="rail-item active" type="button">⌂<span>主页</span></button>
+        <button class="rail-item" type="button">□<span>文件</span></button>
+        <button class="rail-item" type="button">◌<span>通知</span></button>
+        <button class="rail-item" type="button">⚙<span>管理</span></button>
+      </aside>
+
+      <aside class="sidebar">
+        <div class="brand">
+          <div>
+            <h1>久谦咨询</h1>
+          </div>
+          <button id="newChatButton" class="icon-button" type="button" title="新建分析">＋</button>
+        </div>
+
+        <section class="side-section">
+          <div class="side-title">☆ 已加星标</div>
+          <p class="side-note">将主要的内容拖放到此处</p>
+        </section>
+
+        <section class="side-section">
+          <div class="side-title">▣ 话题</div>
+          <button class="topic-item active" type="button">产品竞争分析</button>
+          <button class="topic-item" type="button">产品技术趋势研究</button>
+        </section>
+
+        <section class="side-block history-block">
+          <div class="side-heading">
+            <span class="side-title">AI分析师</span>
+            <button id="refreshSessionsButton" class="text-button" type="button">刷新</button>
+          </div>
+          <div id="sessionList" class="session-list"></div>
+        </section>
+
+        <section class="side-section search-section">
+          <div class="side-title">⌕ 搜索</div>
+          <button class="topic-item" type="button">历史分析结果</button>
+        </section>
+
+        <section class="theme-switcher" aria-label="页面主题">
+          <button type="button" class="theme-option" data-theme-option="light">浅色</button>
+          <button type="button" class="theme-option" data-theme-option="dark">深色</button>
+          <button type="button" class="theme-option" data-theme-option="system">系统</button>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">今天</p>
+            <h2 id="workspaceTitle">AI分析员提供答案详情</h2>
+            <p id="workspaceSubtitle">现在启动多维度研究，并将结果沉淀到左侧历史会话。</p>
+          </div>
+          <div id="statusBadge" class="status">就绪</div>
+        </header>
+
+        <nav class="workspace-tabs" aria-label="工作区视图">
+          <button class="tab-item active" type="button">● 推荐</button>
+          <button class="tab-item" type="button">▧ 添加笔记</button>
+          <button class="tab-item" type="button">▱ 文件夹</button>
+          <button class="tab-item" type="button">☆ 收藏</button>
+          <button class="tab-item" type="button">＋</button>
+        </nav>
+
+        <section id="taskPanel" class="task-panel hidden">
+          <div>
+            <h3>任务计划</h3>
+            <div id="taskPlan" class="task-list"></div>
+          </div>
+          <div>
+            <h3>执行步骤</h3>
+            <div id="executionSteps" class="step-list"></div>
+          </div>
+        </section>
+
+        <section id="resultMeta" class="result-meta hidden">
+          <div><span>置信度</span><strong id="confidence">-</strong></div>
+          <div><span>模块</span><strong id="modulesUsed">-</strong></div>
+          <div><span>技能</span><strong id="skillsUsed">-</strong></div>
+        </section>
+
+        <section id="reflectionPanel" class="detail-panel hidden">
+          <h3>反思检索</h3>
+          <div id="reflectionSummary" class="reflection-summary"></div>
+          <div id="reflectionTrace" class="trace-list"></div>
+        </section>
+
+        <section id="messages" class="messages" aria-live="polite">
+          <article class="message assistant">
+            <div class="avatar">AI</div>
+            <div class="bubble">
+              <p id="welcomeText">请在右侧输入问题开始研究。</p>
+            </div>
+          </article>
+        </section>
+      </main>
+
+      <aside id="evidenceDrawer" class="evidence-drawer">
+        <div id="drawerResizeHandle" class="drawer-resize-handle" role="separator" aria-orientation="vertical" title="拖动调整右侧边栏宽度"></div>
+        <header>
+          <h2>AI任务方案</h2>
+          <p id="evidenceHint">点击报告中的分类或引用，查看对应语料。</p>
+        </header>
+
+        <section id="citationsPanel" class="drawer-section hidden">
+          <h3>引用来源</h3>
+          <div id="citations" class="chips"></div>
+        </section>
+
+        <div id="evidenceList" class="evidence-list"></div>
+
+        <section id="followUpsPanel" class="drawer-section hidden">
+          <h3>后续问题</h3>
+          <div id="followUps" class="followups"></div>
+        </section>
+
+        <form id="chatForm" class="composer">
+          <textarea id="query" rows="3" placeholder="请先选择分析方向，可拖动右下角调整输入高度" required></textarea>
+          <button id="sendButton" type="submit" aria-label="发送问题">↑</button>
+        </form>
+      </aside>
+    </div>
+
+    <div id="directionModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-modal-close></div>
+      <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="directionModalTitle">
+        <header class="modal-header">
+          <div>
+            <h2 id="directionModalTitle">选择分析方向</h2>
+            <p>新建一个分析对话，系统会按所选方向组织检索和输出。</p>
+          </div>
+          <button id="directionModalClose" class="icon-button" type="button" aria-label="关闭">×</button>
+        </header>
+        <div class="modal-options">
+          <button
+            type="button"
+            class="modal-option"
+            data-modal-direction="competitive"
+            data-direction-query="请对某产品开展系统性的竞争分析"
+          >
+            <span>01</span>
+            <strong>产品竞争分析</strong>
+            <small>对某产品开展系统性的竞争分析</small>
+          </button>
+          <button
+            type="button"
+            class="modal-option"
+            data-modal-direction="tech"
+            data-direction-query="请对某产品所处的技术领域进行系统性趋势研究"
+          >
+            <span>02</span>
+            <strong>产品技术趋势研究</strong>
+            <small>对某产品所处的技术领域进行系统性趋势研究</small>
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
