@@ -1,3 +1,7 @@
 # Optional: when installed, the workflow uses LangGraph. Without it, the app
 # falls back to the built-in sequential executor.
 langgraph>=0.1.0
+
+# Optional: local embedding provider, for example
+# EMBEDDING_PROVIDER=local and EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2.
+sentence-transformers>=2.2.0

@@ -74,17 +74,27 @@ LLM_LOG_MAX_CHARS=20000
 
 代码会自动把完整 `/chat/completions` 地址归一化为 SDK 需要的 base URL。如果没有配置 `OPENAI_API_KEY`，后端会自动退回 mock 输出，保证本地开发不断线。
 
-Embedding 检索默认读取：
+Embedding 检索默认读取。查询侧 embedding 必须与 ES 中 chunk 的 embedding 使用同一个模型和维度；例如 ES chunk 使用本地 `paraphrase-multilingual-MiniLM-L12-v2` 时：
 
 ```text
-EMBEDDING_PROVIDER=openai
-EMBEDDING_ENDPOINT=https://gz-eastus2.openai.azure.com/openai/v1/embeddings
-EMBEDDING_MODEL=<与 ES 文档 embedding 相同的模型>
-EMBEDDING_DIMS=<与 ES embedding 字段维度一致>
+EMBEDDING_PROVIDER=local
+EMBEDDING_ENDPOINT=
+EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
+EMBEDDING_DEPLOYMENT=<Azure OpenAI 中的 embedding 部署名；非 Azure 可留空>
+EMBEDDING_DIMS=384
 EMBEDDING_REQUEST_DIMENSIONS=false
+EMBEDDING_DEVICE=
+EMBEDDING_NORMALIZE=true
+HF_ENDPOINT=https://hf-mirror.com
+HF_HUB_CONNECT_TIMEOUT=60
+HF_HUB_DOWNLOAD_TIMEOUT=120
 RETRIEVAL_CANDIDATES_SIZE=24
 RETRIEVAL_RERANK_ENABLED=true
 ```
+
+`EMBEDDING_PROVIDER=local` 使用 `sentence-transformers` 加载 `EMBEDDING_MODEL`。首次运行如果本地没有模型缓存，会由 `sentence-transformers` 下载模型；离线环境可以把 `EMBEDDING_MODEL` 配成已下载模型的本地目录。`HF_ENDPOINT`、`HF_HUB_CONNECT_TIMEOUT`、`HF_HUB_DOWNLOAD_TIMEOUT` 会在加载模型前写入环境变量，用于配置 HuggingFace 镜像和下载超时。`HF_ENDPOINT` 可按网络环境切换为 `https://hf-mirror.com`、`https://huggingface.co`、`https://mirrors.tuna.tsinghua.edu.cn/hugging-face-models` 或其他兼容地址。`EMBEDDING_NORMALIZE` 需要与建库时保持一致。
+
+使用 Azure OpenAI 时，可以改为 `EMBEDDING_PROVIDER=openai` 并配置 `EMBEDDING_ENDPOINT`。SDK 请求里的 `model` 参数实际要填 Azure 资源中的 deployment name，代码会优先使用 `EMBEDDING_DEPLOYMENT`；如果留空，则回退到 `EMBEDDING_MODEL`。因此遇到 `unavailable_model` 时，通常需要在 Azure OpenAI Studio 中确认该资源下已部署 embedding 模型，并把精确部署名填到 `EMBEDDING_DEPLOYMENT`。
 
 项目的 VS Code Python 解释器已配置为：
 

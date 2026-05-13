@@ -26,6 +26,13 @@ def _get_int(name: str, default: int) -> int:
     return int(value)
 
 
+def _get_optional_int(name: str) -> Optional[int]:
+    value = os.getenv(name)
+    if value is None or value == "":
+        return None
+    return int(value)
+
+
 def _get_float(name: str, default: float) -> float:
     value = os.getenv(name)
     if value is None or value == "":
@@ -58,8 +65,14 @@ class Settings(BaseModel):
     embedding_endpoint: Optional[str] = None
     embedding_api_key: Optional[str] = None
     embedding_model: Optional[str] = None
+    embedding_deployment: Optional[str] = None
     embedding_dims: int = 1024
     embedding_request_dimensions: bool = False
+    embedding_device: Optional[str] = None
+    embedding_normalize: bool = True
+    hf_endpoint: Optional[str] = None
+    hf_hub_connect_timeout: Optional[int] = None
+    hf_hub_download_timeout: Optional[int] = None
 
     retrieval_size: int = 8
     retrieval_rrf_k: int = 60
@@ -86,8 +99,14 @@ def get_settings() -> Settings:
         embedding_endpoint=os.getenv("EMBEDDING_ENDPOINT") or None,
         embedding_api_key=os.getenv("EMBEDDING_API_KEY") or os.getenv("OPENAI_API_KEY") or None,
         embedding_model=os.getenv("EMBEDDING_MODEL") or None,
+        embedding_deployment=os.getenv("EMBEDDING_DEPLOYMENT") or None,
         embedding_dims=_get_int("EMBEDDING_DIMS", 1024),
         embedding_request_dimensions=_get_bool("EMBEDDING_REQUEST_DIMENSIONS", False),
+        embedding_device=os.getenv("EMBEDDING_DEVICE") or None,
+        embedding_normalize=_get_bool("EMBEDDING_NORMALIZE", True),
+        hf_endpoint=os.getenv("HF_ENDPOINT") or None,
+        hf_hub_connect_timeout=_get_optional_int("HF_HUB_CONNECT_TIMEOUT"),
+        hf_hub_download_timeout=_get_optional_int("HF_HUB_DOWNLOAD_TIMEOUT"),
         retrieval_size=_get_int("RETRIEVAL_SIZE", 8),
         retrieval_rrf_k=_get_int("RETRIEVAL_RRF_K", 60),
         retrieval_candidates_size=_get_int("RETRIEVAL_CANDIDATES_SIZE", 24),
