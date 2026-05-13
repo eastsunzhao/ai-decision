@@ -42,6 +42,17 @@ class SessionStore:
                 return item
         return None
 
+    def delete_session(self, session_id: str) -> bool:
+        payload = self._read()
+        sessions = payload.get("sessions", [])
+        remaining = [item for item in sessions if item.get("session_id") != session_id]
+        if len(remaining) == len(sessions):
+            return False
+        payload["sessions"] = remaining
+        self._write(payload)
+        logger.info("session_deleted session_id=%s total_sessions=%s", session_id, len(remaining))
+        return True
+
     def save_session(self, scenario_id: str, query: str, response: Dict[str, Any]) -> Dict[str, Any]:
         payload = self._read()
         sessions = payload.get("sessions", [])

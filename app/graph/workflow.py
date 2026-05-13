@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import logging
+import re
+from pathlib import Path
 from typing import Any, Dict, Optional
 
+import yaml
+
 from app.agents.scenario import ScenarioManager
+from app.core.embeddings import embed_query
 from app.agents.reflection import ReflectionAgent
 from app.core.config import settings
 from app.core.llm import call_llm_json
 from app.core.state import ResearchState
 from app.es.retrieval import HybridRetriever
+from app.prompts.query_rewrite import build_query_rewrite_prompt
 from app.skills.market_new_product import market_new_product_skill
 from app.skills.product_competitive import product_competitive_skill
 from app.skills.tech_trend import tech_trend_skill
@@ -134,6 +140,21 @@ class AgentWorkflow:
 
     def scenario_loader(self, state: ResearchState) -> ResearchState:
         state.scenario_config = self.scenario_manager.get_scenario(state.scenario_id) or {}
+        scenario = state.scenario_config or {}
+        directions = scenario.get("analysis_directions") or []
+        data_sources = scenario.get("data_sources") or []
+        workflow_order = scenario.get("workflow_order") or []
+        self._append_method_trace(
+            state,
+            "scenario_loader",
+            "方法追踪：加载场景=%s；开放分析方向=%s；数据源=%s；工作流=%s。"
+            % (
+                scenario.get("name", state.scenario_id),
+                "、".join(item.get("name", item.get("direction_id", "")) for item in directions) or "-",
+                "、".join(item.get("type", "-") for item in data_sources) or "-",
+                " -> ".join(workflow_order) or "-",
+            ),
+        )
         logger.info("scenario_loaded scenario_id=%s found=%s", state.scenario_id, bool(state.scenario_config))
         return state
 
@@ -142,11 +163,35 @@ class AgentWorkflow:
         scenario = state.scenario_config or {}
         for skill_id, skill in (scenario.get("skills") or {}).items():
             triggers = skill.get("triggers") or []
-            if any(str(trigger).lower() in query for trigger in triggers):
+            matched = [str(trigger) for trigger in triggers if str(trigger).lower() in query]
+            if matched:
                 state.route = skill_id
+                direction = self._direction_for_skill(scenario, skill_id)
+                self._append_method_trace(
+                    state,
+                    "research_router",
+                    "方法追踪：命中路由规则=trigger_match；触发词=%s；route=%s；analysis_direction=%s；methodology_config=%s。"
+                    % (
+                        "、".join(matched),
+                        state.route,
+                        direction.get("name", "-") if direction else "-",
+                        direction.get("methodology_config", "-") if direction else "-",
+                    ),
+                )
                 logger.info("research_route_selected scenario_id=%s route=%s trigger_match=true", state.scenario_id, state.route)
                 return state
         state.route = scenario.get("default_route", "market_new_product_skill")
+        direction = self._direction_for_skill(scenario, state.route)
+        self._append_method_trace(
+            state,
+            "research_router",
+            "方法追踪：命中路由规则=default_route；route=%s；analysis_direction=%s；methodology_config=%s。"
+            % (
+                state.route,
+                direction.get("name", "-") if direction else "-",
+                direction.get("methodology_config", "-") if direction else "-",
+            ),
+        )
         logger.info("research_route_selected scenario_id=%s route=%s default=true", state.scenario_id, state.route)
         return state
 
@@ -166,14 +211,52 @@ class AgentWorkflow:
             {"id": "cite", "name": "引用校验", "description": "输出引用编号和可查看的语料片段。", "status": "pending"},
         ]
         state.execution_steps.append({"name": "task_plan_builder", "status": "completed", "message": "已生成任务计划。"})
+        methodology = self._methodology_for_skill(state.route or "", state.scenario_config or {})
+        workflow_steps = methodology.get("workflow") or []
+        if workflow_steps:
+            self._append_method_trace(
+                state,
+                "task_plan_builder",
+                "方法追踪：方向方法论步骤=%s。"
+                % " -> ".join("%s:%s" % (item.get("step_id", "-"), item.get("name", "-")) for item in workflow_steps),
+            )
         logger.info("task_plan_built scenario_id=%s plan_steps=%s", state.scenario_id, len(state.task_plan))
         return state
 
     def query_rewriter(self, state: ResearchState) -> ResearchState:
-        result = call_llm_json("", params={"task": "query_rewrite", "query": state.query})
-        state.rewritten_query = result.get("text", state.query).strip() or state.query
+        scenario = state.scenario_config or {}
+        skill = (scenario.get("skills") or {}).get(state.route or "", {})
+        methodology = self._methodology_for_skill(state.route or "", scenario)
+        prompt_context = {
+            "query": state.query,
+            "scenario_id": state.scenario_id,
+            "route": state.route,
+            "analysis_direction": (self._direction_for_skill(scenario, state.route or "") or {}).get("name"),
+            "skill": state.route,
+            "modules": skill.get("modules") or [],
+            "required_evidence": skill.get("required_evidence") or methodology.get("required_evidence") or [],
+            "blackboard_instruction_templates": methodology.get("blackboard_instruction_templates") or [],
+            "router_methodology": methodology.get("router_methodology") or {},
+        }
+        prompt = build_query_rewrite_prompt(prompt_context)
+        result = call_llm_json(prompt, params={"task": "query_rewrite", **prompt_context})
+        rewrite_payload = self._parse_query_rewrite_result(result.get("text", ""), state.query)
+        state.rewritten_query = rewrite_payload["rewritten_query"]
         self._mark_plan(state, "rewrite", "completed")
         state.execution_steps.append({"name": "query_rewriter", "status": "completed", "message": state.rewritten_query})
+        self._append_method_trace(
+            state,
+            "query_rewriter",
+            "方法追踪：Prompt类型=query_rewrite_structured；LLM_PROVIDER=%s；model=%s；must_terms=%s；expanded_terms=%s；evidence_targets=%s；改写依据=%s。"
+            % (
+                settings.llm_provider,
+                settings.openai_model,
+                "、".join(rewrite_payload.get("must_terms") or []) or "-",
+                "、".join(rewrite_payload.get("expanded_terms") or []) or "-",
+                "、".join(rewrite_payload.get("evidence_targets") or []) or "-",
+                rewrite_payload.get("rewrite_reason") or "-",
+            ),
+        )
         logger.info("query_rewritten scenario_id=%s rewritten_len=%s", state.scenario_id, len(state.rewritten_query or ""))
         return state
 
@@ -184,9 +267,25 @@ class AgentWorkflow:
                 state.rewritten_query or state.query,
                 query_vector=vector,
                 size=settings.retrieval_size,
+                candidate_size=settings.retrieval_candidates_size,
+                rerank=settings.retrieval_rerank_enabled,
             )
             self._mark_plan(state, "retrieve", "completed")
             state.execution_steps.append({"name": "retrieval", "status": "completed", "message": f"初始检索返回 {len(state.retrieval_results)} 条语料。"})
+            self._append_method_trace(
+                state,
+                "retrieval",
+                "方法追踪：检索策略=ES Hybrid RAG；BM25=on；dense_vector=%s；embedding_provider=%s；RRF_k=%s；rerank=%s；index=%s；candidate_size=%s；top_k=%s。"
+                % (
+                    "on" if vector else "off",
+                    settings.embedding_provider,
+                    settings.retrieval_rrf_k,
+                    "on" if settings.retrieval_rerank_enabled else "off",
+                    settings.es_index,
+                    settings.retrieval_candidates_size,
+                    settings.retrieval_size,
+                ),
+            )
             logger.info("retrieval_completed scenario_id=%s results=%s", state.scenario_id, len(state.retrieval_results))
         except Exception as exc:
             state.errors.append(f"retrieval_failed: {exc}")
@@ -206,6 +305,29 @@ class AgentWorkflow:
             state.chosen_skill = "market_new_product_skill"
             state.chosen_instruction_modules = ["G1", "G4", "G10"]
         state.execution_steps.append({"name": "instruction_selector", "status": "completed", "message": f"选择技能 {state.chosen_skill}。"})
+        methodology = self._methodology_for_skill(state.chosen_skill or "", scenario)
+        prompt_sources = methodology.get("source_prompts") or {}
+        templates = methodology.get("blackboard_instruction_templates") or []
+        selected_modules = methodology.get("router_methodology", {}).get("selected_modules") or []
+        module_rules = [
+            "%s:%s" % (item.get("module_id", "-"), item.get("use_for", "-"))
+            for item in selected_modules
+            if item.get("module_id")
+        ]
+        required_evidence = skill.get("required_evidence") or methodology.get("required_evidence") or []
+        self._append_method_trace(
+            state,
+            "instruction_selector",
+            "方法追踪：Prompt来源=%s；黑板模板=%s；skill=%s；modules=%s；module_rules=%s；required_evidence=%s。"
+            % (
+                "；".join("%s=%s" % (key, value) for key, value in prompt_sources.items()) or "-",
+                "、".join(templates) or "-",
+                state.chosen_skill,
+                "、".join(state.chosen_instruction_modules) or "-",
+                "；".join(module_rules) or "-",
+                "、".join(required_evidence) or "-",
+            ),
+        )
         logger.info(
             "instruction_selected scenario_id=%s skill=%s modules=%s",
             state.scenario_id,
@@ -215,10 +337,12 @@ class AgentWorkflow:
         return state
 
     def skill_executor(self, state: ResearchState) -> ResearchState:
+        self._append_skill_method_trace(state, "before")
         if state.chosen_skill == "market_new_product_skill":
             state = market_new_product_skill(state)
             self._mark_plan(state, "synthesize", "completed")
             state.execution_steps.append({"name": "skill_executor", "status": "completed", "message": "已生成分类表格分析结果。"})
+            self._append_skill_method_trace(state, "after")
             logger.info("skill_executed scenario_id=%s skill=%s sections=%s", state.scenario_id, state.chosen_skill, len(state.answer_sections))
             return state
 
@@ -226,6 +350,7 @@ class AgentWorkflow:
             state = product_competitive_skill(state)
             self._mark_plan(state, "synthesize", "completed")
             state.execution_steps.append({"name": "skill_executor", "status": "completed", "message": "已生成产品竞争分析结果。"})
+            self._append_skill_method_trace(state, "after")
             logger.info("skill_executed scenario_id=%s skill=%s sections=%s", state.scenario_id, state.chosen_skill, len(state.answer_sections))
             return state
 
@@ -233,6 +358,7 @@ class AgentWorkflow:
             state = tech_trend_skill(state)
             self._mark_plan(state, "synthesize", "completed")
             state.execution_steps.append({"name": "skill_executor", "status": "completed", "message": "已生成技术趋势研究结果。"})
+            self._append_skill_method_trace(state, "after")
             logger.info("skill_executed scenario_id=%s skill=%s sections=%s", state.scenario_id, state.chosen_skill, len(state.answer_sections))
             return state
 
@@ -248,9 +374,31 @@ class AgentWorkflow:
         if not reflection_config.get("enabled", True):
             logger.info("reflection_skipped scenario_id=%s reason=disabled", state.scenario_id)
             return state
+        self._append_method_trace(
+            state,
+            "reflection_agent",
+            "方法追踪：反思规则=max_iterations:%s；max_entities_per_iteration:%s；min_new_docs_per_iteration:%s；target_evidence_coverage:%s；retrieval_size_per_entity:%s。"
+            % (
+                reflection_config.get("max_iterations", "-"),
+                reflection_config.get("max_entities_per_iteration", "-"),
+                reflection_config.get("min_new_docs_per_iteration", "-"),
+                reflection_config.get("target_evidence_coverage", "-"),
+                reflection_config.get("retrieval_size_per_entity", "-"),
+            ),
+        )
         state = self.reflection_agent.run(state)
         self._mark_plan(state, "reflect", "completed")
         state.execution_steps.append({"name": "reflection_agent", "status": "completed", "message": f"反思检索 {state.reflection_iterations} 轮，关联实体 {len(state.related_entities)} 个。"})
+        self._append_method_trace(
+            state,
+            "reflection_agent",
+            "方法追踪：反思结果=iterations:%s；related_entities:%s；evidence_coverage:%s。"
+            % (
+                state.reflection_iterations,
+                "、".join(state.related_entities) or "-",
+                "、".join("%s=%s" % (key, value) for key, value in state.evidence_coverage.items()) or "-",
+            ),
+        )
         logger.info(
             "reflection_completed scenario_id=%s iterations=%s related_entities=%s",
             state.scenario_id,
@@ -276,6 +424,17 @@ class AgentWorkflow:
         state.confidence = state.confidence if state.confidence is not None else 0.5
         self._mark_plan(state, "cite", "completed")
         state.execution_steps.append({"name": "citation_checker", "status": "completed", "message": f"校验引用 {len(state.citations)} 条。"})
+        self._append_method_trace(
+            state,
+            "citation_checker",
+            "方法追踪：最终modules_used=%s；skills_used=%s；citations=%s；confidence=%.2f。"
+            % (
+                "、".join(state.modules_used) or "-",
+                "、".join(state.skills_used) or "-",
+                "、".join(state.citations) or "-",
+                state.confidence or 0.0,
+            ),
+        )
         logger.info(
             "citation_checked scenario_id=%s citations=%s modules=%s skills=%s confidence=%.2f",
             state.scenario_id,
@@ -287,13 +446,107 @@ class AgentWorkflow:
         return state
 
     def _encode_query_vector(self, query: str) -> Optional[list[float]]:
-        return None
+        return embed_query(query)
 
     def _mark_plan(self, state: ResearchState, plan_id: str, status: str) -> None:
         for item in state.task_plan:
             if item.get("id") == plan_id:
                 item["status"] = status
                 return
+
+    def _append_method_trace(self, state: ResearchState, name: str, message: str) -> None:
+        state.execution_steps.append({"name": name, "status": "completed", "message": message})
+        logger.info("method_trace scenario_id=%s node=%s message=%s", state.scenario_id, name, message)
+
+    def _append_skill_method_trace(self, state: ResearchState, phase: str) -> None:
+        methodology = self._methodology_for_skill(state.chosen_skill or "", state.scenario_config or {})
+        output_contract = methodology.get("output_contract") or {}
+        configured_sections = output_contract.get("sections") or []
+        skill_task = {
+            "market_new_product_skill": "market_new_product",
+            "product_competitive_skill": "product_competitive",
+            "tech_trend_skill": "tech_trend",
+        }.get(state.chosen_skill or "", state.chosen_skill or "-")
+
+        if phase == "before":
+            self._append_method_trace(
+                state,
+                "skill_executor",
+                "方法追踪：Skill执行前；skill=%s；LLM任务类型=%s；输入证据数=%s；configured_sections=%s；output_style=%s；citation_label=%s。"
+                % (
+                    state.chosen_skill or "-",
+                    skill_task,
+                    len(state.retrieval_results),
+                    "、".join(configured_sections) or "-",
+                    output_contract.get("style", "-"),
+                    output_contract.get("citation_label", "-"),
+                ),
+            )
+            return
+
+        self._append_method_trace(
+            state,
+            "skill_executor",
+            "方法追踪：Skill执行后；skill=%s；实际sections=%s；skills_used=%s；modules_used=%s；citations=%s；follow_up_questions=%s。"
+            % (
+                state.chosen_skill or "-",
+                "、".join(item.get("id", item.get("title", "-")) for item in state.answer_sections) or "-",
+                "、".join(state.skills_used) or "-",
+                "、".join(state.modules_used) or "-",
+                "、".join(state.citations) or "-",
+                "、".join(state.follow_up_questions) or "-",
+            ),
+        )
+
+    def _direction_for_skill(self, scenario: Dict[str, Any], skill_id: str) -> Optional[Dict[str, Any]]:
+        for direction in scenario.get("analysis_directions") or []:
+            if direction.get("skill_id") == skill_id:
+                return direction
+        return None
+
+    def _methodology_for_skill(self, skill_id: str, scenario: Dict[str, Any]) -> Dict[str, Any]:
+        direction = self._direction_for_skill(scenario, skill_id)
+        if not direction:
+            return {}
+        config_path = direction.get("methodology_config")
+        if not config_path:
+            return {}
+        path = Path(config_path)
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                return yaml.safe_load(f) or {}
+        except Exception:
+            logger.exception("methodology_config_load_failed path=%s skill=%s", path, skill_id)
+            return {}
+
+    def _parse_query_rewrite_result(self, text: str, fallback_query: str) -> Dict[str, Any]:
+        raw = (text or "").strip()
+        fence_match = re.match(r"^```(?:json)?\s*(.*?)\s*```$", raw, flags=re.DOTALL | re.IGNORECASE)
+        if fence_match:
+            raw = fence_match.group(1).strip()
+        try:
+            payload = yaml.safe_load(raw) if raw else {}
+            if not isinstance(payload, dict):
+                raise ValueError("query rewrite result is not a dict")
+        except Exception:
+            payload = {"rewritten_query": raw or fallback_query}
+
+        rewritten_query = str(payload.get("rewritten_query") or fallback_query).strip()
+        must_terms = [str(item).strip() for item in payload.get("must_terms", []) if str(item).strip()]
+        expanded_terms = [str(item).strip() for item in payload.get("expanded_terms", []) if str(item).strip()]
+        evidence_targets = [str(item).strip() for item in payload.get("evidence_targets", []) if str(item).strip()]
+        if fallback_query not in rewritten_query:
+            rewritten_query = f"{fallback_query} {rewritten_query}".strip()
+        return {
+            "rewritten_query": rewritten_query,
+            "must_terms": must_terms,
+            "expanded_terms": expanded_terms,
+            "negative_terms": [str(item).strip() for item in payload.get("negative_terms", []) if str(item).strip()],
+            "evidence_targets": evidence_targets,
+            "rewrite_reason": str(payload.get("rewrite_reason") or "").strip(),
+        }
 
     def _step_message(self, node_name: str, status: str) -> str:
         labels = {

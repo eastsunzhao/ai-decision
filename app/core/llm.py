@@ -130,8 +130,22 @@ def _mock_llm(params: Dict[str, Any]) -> Dict[str, Any]:
     task = params.get("task")
     if task == "query_rewrite":
         query = str(params.get("query", "")).strip()
-        terms = ["新品", "上市", "市场表现", "销售", "增长", "渠道", "近5年"]
-        return {"text": f"{query} {' '.join(terms)}", "metadata": {"model": "mock", "confidence": 0.6}}
+        route = str(params.get("route") or params.get("skill") or "")
+        if route == "product_competitive_skill":
+            terms = ["竞品", "竞争格局", "同类产品", "产品定位", "渠道", "价格", "品牌", "市场表现", "销售", "增长", "差异化"]
+        elif route == "tech_trend_skill":
+            terms = ["技术路线", "技术趋势", "演进阶段", "专利", "研发", "产业链", "供应链", "应用场景", "商业化"]
+        else:
+            terms = ["新品", "上市", "市场表现", "销售", "增长", "渠道", "近5年"]
+        payload = {
+            "rewritten_query": f"{query} {' '.join(terms)}",
+            "must_terms": [query],
+            "expanded_terms": terms,
+            "negative_terms": [],
+            "evidence_targets": params.get("required_evidence", []),
+            "rewrite_reason": "基于当前分析路线补充检索维度词以提升召回。",
+        }
+        return {"text": json.dumps(payload, ensure_ascii=False), "metadata": {"model": "mock", "confidence": 0.6}}
 
     if task == "market_new_product":
         docs: List[Dict[str, Any]] = params.get("documents", [])

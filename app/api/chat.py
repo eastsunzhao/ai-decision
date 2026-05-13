@@ -124,3 +124,12 @@ def session_detail(session_id: str) -> dict:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     logger.info("session_detail_requested session_id=%s", session_id)
     return session
+
+
+@router.delete("/sessions/{session_id}")
+def delete_session(session_id: str) -> dict:
+    deleted = session_store.delete_session(session_id)
+    if not deleted:
+        logger.warning("session_delete_not_found session_id=%s", session_id)
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    return {"ok": True, "session_id": session_id}

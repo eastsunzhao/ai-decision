@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Sequence
 
+from app.core.embeddings import embed_query
 from app.core.state import ResearchState, RetrievalDocument
 from app.es.retrieval import HybridRetriever
 
@@ -54,7 +55,11 @@ class ReflectionAgent:
             for entity in selected:
                 query = self._build_related_query(state, entity)
                 try:
-                    docs = self.retriever.search(query, size=config.retrieval_size_per_entity)
+                    docs = self.retriever.search(
+                        query,
+                        query_vector=embed_query(query),
+                        size=config.retrieval_size_per_entity,
+                    )
                 except Exception as exc:
                     state.errors.append(f"reflection_retrieval_failed:{entity}:{exc}")
                     logger.exception("reflection_entity_retrieval_failed scenario_id=%s iteration=%s entity=%s", state.scenario_id, iteration, entity)

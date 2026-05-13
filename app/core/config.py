@@ -56,10 +56,15 @@ class Settings(BaseModel):
 
     embedding_provider: str = "none"
     embedding_endpoint: Optional[str] = None
+    embedding_api_key: Optional[str] = None
+    embedding_model: Optional[str] = None
     embedding_dims: int = 1024
+    embedding_request_dimensions: bool = False
 
     retrieval_size: int = 8
     retrieval_rrf_k: int = 60
+    retrieval_candidates_size: int = 24
+    retrieval_rerank_enabled: bool = True
 
 
 @lru_cache
@@ -79,9 +84,14 @@ def get_settings() -> Settings:
         llm_log_max_chars=_get_int("LLM_LOG_MAX_CHARS", 20000),
         embedding_provider=os.getenv("EMBEDDING_PROVIDER", "none"),
         embedding_endpoint=os.getenv("EMBEDDING_ENDPOINT") or None,
+        embedding_api_key=os.getenv("EMBEDDING_API_KEY") or os.getenv("OPENAI_API_KEY") or None,
+        embedding_model=os.getenv("EMBEDDING_MODEL") or None,
         embedding_dims=_get_int("EMBEDDING_DIMS", 1024),
+        embedding_request_dimensions=_get_bool("EMBEDDING_REQUEST_DIMENSIONS", False),
         retrieval_size=_get_int("RETRIEVAL_SIZE", 8),
         retrieval_rrf_k=_get_int("RETRIEVAL_RRF_K", 60),
+        retrieval_candidates_size=_get_int("RETRIEVAL_CANDIDATES_SIZE", 24),
+        retrieval_rerank_enabled=_get_bool("RETRIEVAL_RERANK_ENABLED", True),
     )
 
 

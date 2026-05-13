@@ -44,6 +44,8 @@
         <button class="rail-item" type="button">□<span>文件</span></button>
         <button class="rail-item" type="button">◌<span>通知</span></button>
         <button class="rail-item" type="button">⚙<span>管理</span></button>
+        <div class="rail-spacer"></div>
+        <div class="rail-user" aria-label="当前用户"><span></span></div>
       </aside>
 
       <aside class="sidebar">
@@ -103,6 +105,11 @@
           <button class="tab-item" type="button">＋</button>
         </nav>
 
+        <section id="promptContext" class="prompt-context">
+          <p id="welcomeText">请在右侧输入问题开始研究。</p>
+          <strong id="currentQuestion">等待输入分析问题</strong>
+        </section>
+
         <section id="taskPanel" class="task-panel hidden">
           <div>
             <h3>任务计划</h3>
@@ -127,12 +134,6 @@
         </section>
 
         <section id="messages" class="messages" aria-live="polite">
-          <article class="message assistant">
-            <div class="avatar">AI</div>
-            <div class="bubble">
-              <p id="welcomeText">请在右侧输入问题开始研究。</p>
-            </div>
-          </article>
         </section>
       </main>
 

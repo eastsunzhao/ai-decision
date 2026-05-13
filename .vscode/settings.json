@@ -1,0 +1,6 @@
+{
+  "python.defaultInterpreterPath": "/opt/anaconda3/envs/conda_python311_14/bin/python",
+  "python.envFile": "${workspaceFolder}/.env",
+  "python.terminal.useEnvFile": true,
+  "python.terminal.activateEnvironment": true
+}

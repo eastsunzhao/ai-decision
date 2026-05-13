@@ -29,6 +29,7 @@ const gateButtons = document.querySelectorAll("[data-gate-direction]");
 const workspaceTitle = document.querySelector("#workspaceTitle");
 const workspaceSubtitle = document.querySelector("#workspaceSubtitle");
 const welcomeText = document.querySelector("#welcomeText");
+const currentQuestion = document.querySelector("#currentQuestion");
 const drawerResizeHandle = document.querySelector("#drawerResizeHandle");
 const evidenceDrawer = document.querySelector("#evidenceDrawer");
 const directionModal = document.querySelector("#directionModal");
@@ -165,10 +166,10 @@ function enterDirection(direction, presetQuery) {
   workspaceTitle.textContent = config.title;
   workspaceSubtitle.textContent = config.subtitle;
   welcomeText.textContent = config.welcome;
+  currentQuestion.textContent = "等待输入分析问题";
   queryInput.placeholder = config.placeholder;
   queryInput.value = presetQuery === undefined ? config.query : presetQuery;
   resetWorkspace();
-  addMessage("assistant", config.welcome);
   queryInput.focus();
 }
 
@@ -260,18 +261,20 @@ function renderTaskPanel(plan, steps) {
   plan.forEach((item) => {
     const node = document.createElement("details");
     node.className = `task-item ${item.status || "pending"}`;
+    node.open = item.status === "running";
     node.innerHTML = `<summary><strong>${escapeHtml(item.name || item.id)}</strong></summary><span>${escapeHtml(item.description || "")}</span>`;
     taskPlan.appendChild(node);
   });
 
   executionSteps.innerHTML = "";
-  steps.forEach((item) => appendStep(item.message || item.name || "-", item.status || "completed"));
+  steps.forEach((item, index) => appendStep(item.message || item.name || "-", item.status || "completed", index === steps.length - 1));
 }
 
-function appendStep(message, status = "running") {
+function appendStep(message, status = "running", forceOpen = true) {
   taskPanel.classList.remove("hidden");
   const node = document.createElement("details");
   node.className = `step-item ${status}`;
+  node.open = forceOpen && status === "running";
   node.innerHTML = `<summary>${escapeHtml(message)}</summary><span>${escapeHtml(status)}</span>`;
   executionSteps.appendChild(node);
   executionSteps.scrollTop = executionSteps.scrollHeight;
@@ -287,7 +290,7 @@ function renderSections(sections, container, finalAnswer = "") {
         <span>${escapeHtml(section.title || "-")}</span>
         <small>展开 / 查看引用</small>
       </summary>
-      <p>${escapeHtml(section.summary || "")}</p>
+      <div class="markdown-content">${markdownToHtml(section.summary || "")}</div>
       ${renderTable(section.columns || [], section.rows || [])}
     `;
     block.querySelector(".section-title").addEventListener("click", () => showEvidence(section.citations || []));
@@ -299,10 +302,62 @@ function renderSections(sections, container, finalAnswer = "") {
     finalBlock.innerHTML = `
       <div class="final-kicker">最终推荐答案</div>
       <h3>分析结论</h3>
-      <p>${escapeHtml(finalAnswer)}</p>
+      <div class="markdown-content">${markdownToHtml(finalAnswer)}</div>
     `;
     container.appendChild(finalBlock);
   }
+}
+
+function markdownToHtml(markdown) {
+  const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+  const html = [];
+  let listOpen = false;
+
+  const closeList = () => {
+    if (listOpen) {
+      html.push("</ul>");
+      listOpen = false;
+    }
+  };
+
+  lines.forEach((line) => {
+    const raw = line.trim();
+    if (!raw) {
+      closeList();
+      return;
+    }
+    if (/^---+$/.test(raw)) {
+      closeList();
+      html.push("<hr />");
+      return;
+    }
+    const heading = raw.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      closeList();
+      const level = Math.min(heading[1].length + 2, 6);
+      html.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
+      return;
+    }
+    const listItem = raw.match(/^[-*]\s+(.+)$/);
+    if (listItem) {
+      if (!listOpen) {
+        html.push("<ul>");
+        listOpen = true;
+      }
+      html.push(`<li>${inlineMarkdown(listItem[1])}</li>`);
+      return;
+    }
+    closeList();
+    html.push(`<p>${inlineMarkdown(raw)}</p>`);
+  });
+  closeList();
+  return html.join("");
+}
+
+function inlineMarkdown(value) {
+  return escapeHtml(value)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/`(.+?)`/g, "<code>$1</code>");
 }
 
 function renderTable(columns, rows) {
@@ -405,15 +460,32 @@ function createSessionLabel(text, extraClass = "") {
 }
 
 function createSessionButton(item) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = `session-item ${item.session_id === state.activeSessionId ? "active" : ""}`;
-  button.innerHTML = `
-    <strong>${escapeHtml(item.title || item.query || "未命名分析")}</strong>
-    <span>${escapeHtml(item.created_at || "")}</span>
+  const row = document.createElement("div");
+  row.className = `session-row ${item.session_id === state.activeSessionId ? "active" : ""}`;
+  row.innerHTML = `
+    <button type="button" class="session-item">
+      <strong>${escapeHtml(item.title || item.query || "未命名分析")}</strong>
+      <span>${escapeHtml(formatSessionTime(item.created_at))}</span>
+    </button>
+    <button type="button" class="session-delete" title="删除对话" aria-label="删除对话">×</button>
   `;
-  button.addEventListener("click", () => loadSessionDetail(item.session_id));
-  return button;
+  row.querySelector(".session-item").addEventListener("click", () => loadSessionDetail(item.session_id));
+  row.querySelector(".session-delete").addEventListener("click", (event) => {
+    event.stopPropagation();
+    deleteSession(item.session_id);
+  });
+  return row;
+}
+
+function formatSessionTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${month}-${day} ${hour}:${minute}`;
 }
 
 async function loadSessionDetail(sessionId) {
@@ -422,7 +494,7 @@ async function loadSessionDetail(sessionId) {
   const session = await response.json();
   state.activeSessionId = sessionId;
   resetWorkspace();
-  addMessage("user", session.query || "");
+  currentQuestion.textContent = session.query || "历史分析";
   const assistant = addAssistantShell();
   const data = session.response || {};
   assistant.streamText.textContent = data.answer ? "已加载历史分析结果。" : "该历史会话没有可展示结果。";
@@ -431,6 +503,17 @@ async function loadSessionDetail(sessionId) {
   renderMeta(data);
   showEvidence([]);
   loadSessions();
+}
+
+async function deleteSession(sessionId) {
+  const response = await fetch(`/api/sessions/${sessionId}`, {method: "DELETE"});
+  if (!response.ok) return;
+  if (state.activeSessionId === sessionId) {
+    state.activeSessionId = null;
+    resetWorkspace();
+    currentQuestion.textContent = "等待输入分析问题";
+  }
+  await loadSessions();
 }
 
 function resetWorkspace() {
@@ -451,7 +534,7 @@ async function submitQuestion(event) {
   const query = queryInput.value.trim();
   if (!query) return;
 
-  addMessage("user", query);
+  currentQuestion.textContent = query;
   queryInput.value = "";
   setStatus("分析中", true);
   taskPanel.classList.remove("hidden");
@@ -506,7 +589,8 @@ async function readStream(response, assistant) {
 function handleStreamEvent(event, assistant) {
   if (event.type === "step") {
     assistant.streamText.textContent = event.message || "执行中...";
-    appendStep(event.message || event.name, event.status || "running");
+    collapseRunningSteps();
+    appendStep(event.message || event.name, event.status || "running", event.status === "running");
     const plan = event.state?.task_plan || [];
     if (plan.length) renderTaskPanel(plan, event.state?.execution_steps || []);
     return;
@@ -521,6 +605,12 @@ function handleStreamEvent(event, assistant) {
     renderMeta(data);
     showEvidence([]);
   }
+}
+
+function collapseRunningSteps() {
+  executionSteps.querySelectorAll("details.step-item[open]").forEach((node) => {
+    node.open = false;
+  });
 }
 
 form.addEventListener("submit", submitQuestion);

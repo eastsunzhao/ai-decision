@@ -8,7 +8,7 @@
 
 - FastAPI `/api/chat` 接口
 - LangGraph 工作流，缺少依赖时可退化为顺序执行器
-- Elasticsearch BM25 + dense kNN + RRF Hybrid RAG
+- Elasticsearch BM25 + dense kNN + RRF + heuristic rerank Hybrid RAG
 - 场景配置：`market_trend_analysis`
 - 技能：`product_competitive_skill`、`tech_trend_skill`；`market_new_product_skill` 作为历史能力保留
 - 统一状态：`ResearchState`
@@ -73,6 +73,18 @@ LLM_LOG_MAX_CHARS=20000
 ```
 
 代码会自动把完整 `/chat/completions` 地址归一化为 SDK 需要的 base URL。如果没有配置 `OPENAI_API_KEY`，后端会自动退回 mock 输出，保证本地开发不断线。
+
+Embedding 检索默认读取：
+
+```text
+EMBEDDING_PROVIDER=openai
+EMBEDDING_ENDPOINT=https://gz-eastus2.openai.azure.com/openai/v1/embeddings
+EMBEDDING_MODEL=<与 ES 文档 embedding 相同的模型>
+EMBEDDING_DIMS=<与 ES embedding 字段维度一致>
+EMBEDDING_REQUEST_DIMENSIONS=false
+RETRIEVAL_CANDIDATES_SIZE=24
+RETRIEVAL_RERANK_ENABLED=true
+```
 
 项目的 VS Code Python 解释器已配置为：
 
@@ -211,10 +223,11 @@ curl http://127.0.0.1:8000/api/sessions/{session_id}
 [app/es/retrieval.py](/Volumes/work/code/code_ai/ai_decision/ai-decision/app/es/retrieval.py) 实现：
 
 - BM25：`multi_match` 检索 `text/content/title/summary/metadata.*` 中的关键业务字段。
-- dense kNN：当上游提供 `query_vector` 时检索 `embedding` 字段。
+- dense kNN：通过 [app/core/embeddings.py](/Volumes/work/code/code_ai/ai_decision/ai-decision/app/core/embeddings.py) 生成 query embedding 后检索 ES `embedding` 字段。
 - RRF：按倒数排序融合 BM25 和向量结果。
+- Rerank：通过 [app/es/rerank.py](/Volumes/work/code/code_ai/ai_decision/ai-decision/app/es/rerank.py) 对 RRF 候选结果做轻量重排，综合 RRF 分、标题命中、正文命中、metadata 命中和精确短语命中。
 
-当前 `_encode_query_vector` 暂返回 `None`，即第一版以 BM25 + RRF 框架跑通；接入 embedding 服务后只需在 [app/graph/workflow.py](/Volumes/work/code/code_ai/ai_decision/ai-decision/app/graph/workflow.py) 替换该函数。
+如果 ES 中的文档向量是 `text-embedding-3-*` 并且建库时指定了 `dimensions=1024`，可以把 `EMBEDDING_REQUEST_DIMENSIONS=true`。如果建库时使用模型默认维度，保持 `false`，避免请求参数与模型能力不匹配。
 
 ## 开发路线
 

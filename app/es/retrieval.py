@@ -7,8 +7,10 @@ from typing import Any, Dict, List, Optional
 from elasticsearch import Elasticsearch
 from elasticsearch import exceptions as es_exceptions
 
+from app.core.config import settings
 from app.core.state import RetrievalDocument
 from app.es.client import create_es_client
+from app.es.rerank import HeuristicReranker
 
 logger = logging.getLogger("ai_decision.es.retrieval")
 
@@ -18,6 +20,7 @@ class HybridRetriever:
         self.es: Elasticsearch = create_es_client()
         self.index = index
         self.rrf_k = rrf_k
+        self.reranker = HeuristicReranker()
 
     def bm25_search(self, query: str, size: int = 8) -> List[Dict[str, Any]]:
         start = time.perf_counter()
@@ -64,20 +67,44 @@ class HybridRetriever:
             logger.warning("es_dense_search_skipped_bad_request index=%s vector_dims=%s", self.index, len(query_vector))
             return []
 
-    def search(self, query: str, query_vector: Optional[List[float]] = None, size: int = 8) -> List[RetrievalDocument]:
+    def search(
+        self,
+        query: str,
+        query_vector: Optional[List[float]] = None,
+        size: int = 8,
+        candidate_size: Optional[int] = None,
+        rerank: Optional[bool] = None,
+    ) -> List[RetrievalDocument]:
         start = time.perf_counter()
-        logger.info("hybrid_search_started index=%s query_len=%s has_vector=%s size=%s", self.index, len(query), bool(query_vector), size)
-        bm25_hits = self.bm25_search(query, size=size)
-        dense_hits = self.dense_search(query_vector, size=size) if query_vector else []
-        merged_hits = self.rrf_merge(bm25_hits, dense_hits, k=self.rrf_k)
-        documents = [self._to_document(hit, score) for hit, score in merged_hits[:size]]
+        candidate_size = candidate_size or max(size, settings.retrieval_candidates_size)
+        rerank_enabled = settings.retrieval_rerank_enabled if rerank is None else rerank
         logger.info(
-            "hybrid_search_completed index=%s bm25_hits=%s dense_hits=%s merged=%s returned=%s elapsed_ms=%.2f",
+            "hybrid_search_started index=%s query_len=%s has_vector=%s size=%s candidate_size=%s rerank=%s",
+            self.index,
+            len(query),
+            bool(query_vector),
+            size,
+            candidate_size,
+            rerank_enabled,
+        )
+        bm25_hits = self.bm25_search(query, size=candidate_size)
+        dense_hits = self.dense_search(query_vector, size=candidate_size) if query_vector else []
+        merged_hits = self.rrf_merge(bm25_hits, dense_hits, k=self.rrf_k)
+        candidate_documents = [self._to_document(hit, score) for hit, score in merged_hits[:candidate_size]]
+        documents = (
+            self.reranker.rerank(candidate_documents, query=query, top_k=size)
+            if rerank_enabled
+            else candidate_documents[:size]
+        )
+        logger.info(
+            "hybrid_search_completed index=%s bm25_hits=%s dense_hits=%s merged=%s candidates=%s returned=%s rerank=%s elapsed_ms=%.2f",
             self.index,
             len(bm25_hits),
             len(dense_hits),
             len(merged_hits),
+            len(candidate_documents),
             len(documents),
+            rerank_enabled,
             (time.perf_counter() - start) * 1000,
         )
         return documents
