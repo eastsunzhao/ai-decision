@@ -1,0 +1,49 @@
+analyst_id: product_competitive_analyst
+name: 产品竞争分析师
+description: 对某产品开展系统性的竞争分析。
+default_query: 请对某产品开展系统性的竞争分析
+skill_id: product_competitive_skill
+methodology_config: app/config/analysis_directions/product_competitive_analysis.yaml
+data_sources:
+  - type: elasticsearch
+    env:
+      url: ES_URL
+      index: ES_INDEX
+workflow_order:
+  - analyst_loader
+  - research_router
+  - task_plan_builder
+  - query_rewriter
+  - retrieval
+  - instruction_selector
+  - reflection_agent
+  - skill_executor
+  - synthesis
+  - citation_checker
+default_route: product_competitive_skill
+reflection:
+  enabled: true
+  max_iterations: 3
+  max_entities_per_iteration: 4
+  min_new_docs_per_iteration: 1
+  target_evidence_coverage: 0.75
+  retrieval_size_per_entity: 3
+skills:
+  product_competitive_skill:
+    name: 产品竞争分析
+    description: 对某产品开展系统性的竞争分析，覆盖竞品、定位、渠道、差异化、风险和行动建议。
+    triggers:
+      - 竞争分析
+      - 竞品
+      - 竞争格局
+      - 对比
+      - 差异化
+    modules:
+      - G2
+      - G7
+      - G10
+    required_evidence:
+      - competitor_signal
+      - sales_or_growth_signal
+      - channel_signal
+      - market_feedback

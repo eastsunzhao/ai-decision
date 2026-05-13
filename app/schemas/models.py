@@ -1,11 +1,22 @@
 from typing import Any, Dict, List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ChatRequest(BaseModel):
-    scenario_id: str = Field(..., examples=["market_trend_analysis"])
-    query: str = Field(..., examples=["达仁堂最近5年市场上的新品表现如何？"])
+    analyst_id: str | None = Field(default=None, examples=["product_competitive_analyst"])
+    scenario_id: str | None = Field(default=None, examples=["market_trend_analysis"])
+    query: str = Field(..., examples=["请对某产品开展系统性的竞争分析"])
+
+    @model_validator(mode="after")
+    def require_entry_id(self) -> "ChatRequest":
+        if not (self.analyst_id or self.scenario_id):
+            raise ValueError("analyst_id is required")
+        return self
+
+    @property
+    def entry_id(self) -> str:
+        return self.analyst_id or self.scenario_id or ""
 
 
 class ChatResponse(BaseModel):

@@ -2,27 +2,27 @@
 
 企业级智能知识问答 / 行业分析决策系统 P0 MVP。当前已落地一条可运行链路：
 
-`市场行情分析 -> 新品表现问题 -> ES Hybrid Search -> 新品清单 -> 最近5年时序 -> 表现总结 -> 原因解释 -> 引用输出`
+`AI分析师 -> ES Hybrid Search -> 反思补证 -> 专项 Skill -> 结构化表格 -> 引用输出`
 
 ## 已实现范围
 
 - FastAPI `/api/chat` 接口
 - LangGraph 工作流，缺少依赖时可退化为顺序执行器
 - Elasticsearch BM25 + dense kNN + RRF + heuristic rerank Hybrid RAG
-- 场景配置：`market_trend_analysis`
+- AI分析师配置：`product_competitive_analyst`、`product_tech_trend_analyst`、`geely_tech_roadmap_analyst`
 - 技能：`product_competitive_skill`、`tech_trend_skill`；`market_new_product_skill` 作为历史能力保留
 - 统一状态：`ResearchState`
 - LLM 抽象：`call_llm_json`，默认 mock，可替换真实模型
 - 标准响应字段：`answer`、`citations`、`modules_used`、`skills_used`、`confidence`、`follow_up_questions`
-- 前端工作台：首屏分析方向选择、问答输入、答案展示、引用、模块/技能、置信度、后续问题
+- 前端工作台：首屏 AI 分析师选择、问答输入、答案展示、引用、模块/技能、置信度、后续问题
 - Reflection Agent：围绕关联实体迭代补充 ES 证据，并输出反思检索轨迹
 - 流式接口：`/api/chat/stream` 会逐步输出任务计划、执行步骤和最终结构化结果
 - 结构化输出：按表格分类展示新品清单、5年时序、表现判断、原因解释和有效总结
 - GPT-5.5：配置 `LLM_PROVIDER=openai`、`OPENAI_MODEL=gpt-5.5`、`OPENAI_API_KEY=...` 后启用真实模型调用
 - 运行日志：工程根目录 `log/app.log`，按天轮转，历史日志 gzip 压缩，最多保留 60 天
 - 会话持久化：每次对话完成后保存到 `data/sessions.json`，左侧历史会话可点击恢复结果
-- 当前用户入口：产品竞争分析、产品技术趋势研究
-- 方法论配置：两个分析方向已拆分到 `app/config/analysis_directions/*.yaml`
+- 当前用户入口：产品竞争分析师、产品技术趋势研究分析师、吉利汽车技术路线图分析师
+- 方法论配置：AI 分析师复用 `app/config/analysis_directions/*.yaml`
 - Agent/Skill 定义：已拆分到 `docs/agents/agent_definition.md`、`docs/skills/skill_definition.md`
 
 ## 目录结构
@@ -39,13 +39,13 @@ app/
   graph/workflow.py
   agents/scenario.py
   agents/reflection.py
+  analysts/
   config/analysis_directions/
   core/session_store.py
   skills/market_new_product.py
   skills/product_competitive.py
   skills/tech_trend.py
   prompts/
-  scenarios/market_trend_analysis.yaml
   schemas/models.py
   static/index.html
   static/styles.css
@@ -115,7 +115,7 @@ http://127.0.0.1:8000/
 ```bash
 curl -X POST http://127.0.0.1:8000/api/chat \
   -H 'Content-Type: application/json' \
-  -d '{"scenario_id":"market_trend_analysis","query":"达仁堂最近5年市场上的新品表现如何？"}'
+  -d '{"analyst_id":"product_competitive_analyst","query":"请对某产品开展系统性的竞争分析"}'
 ```
 
 流式接口：
@@ -123,7 +123,7 @@ curl -X POST http://127.0.0.1:8000/api/chat \
 ```bash
 curl -N -X POST http://127.0.0.1:8000/api/chat/stream \
   -H 'Content-Type: application/json' \
-  -d '{"scenario_id":"market_trend_analysis","query":"达仁堂最近5年市场上的新品表现如何？"}'
+  -d '{"analyst_id":"geely_tech_roadmap_analyst","query":"吉利汽车技术路线图分析"}'
 ```
 
 会话接口：
@@ -135,7 +135,7 @@ curl http://127.0.0.1:8000/api/sessions/{session_id}
 
 ## Agent 工作流
 
-1. `scenario_loader`：读取预置行业分析场景。
+1. `scenario_loader`：读取预置 AI 分析师配置。
 2. `research_router`：根据用户问题选择技能路线。
 3. `query_rewriter`：把自然语言问题改写为检索友好查询。
 4. `retrieval`：执行 ES 混合检索。
@@ -145,21 +145,22 @@ curl http://127.0.0.1:8000/api/sessions/{session_id}
 8. `synthesis`：生成最终分析。
 9. `citation_checker`：去重、校验引用和模块信息。
 
-## 分析方向
+## AI 分析师
 
-当前“分析方向”和“分析场景”统一为首屏入口。进入工作台后左侧不再重复展示方向或场景选择。
+当前已将“场景”和“分析方向”合并为一个入口概念：AI 分析师。每个 AI 分析师直接绑定默认问题、Skill、方法论配置、证据要求和反思规则。
 
-- 产品竞争分析：`product_competitive_skill`，配置见 [product_competitive_analysis.yaml](/Volumes/work/code/code_ai/ai_decision/ai-decision/app/config/analysis_directions/product_competitive_analysis.yaml)
-- 产品技术趋势研究：`tech_trend_skill`，配置见 [product_tech_trend_research.yaml](/Volumes/work/code/code_ai/ai_decision/ai-decision/app/config/analysis_directions/product_tech_trend_research.yaml)
+- 产品竞争分析师：`product_competitive_analyst`，执行 `product_competitive_skill`
+- 产品技术趋势研究分析师：`product_tech_trend_analyst`，执行 `tech_trend_skill`
+- 吉利汽车技术路线图分析师：`geely_tech_roadmap_analyst`，执行 `tech_trend_skill`
 
-后端会根据“竞品、竞争分析、技术趋势、技术路线、路线图”等触发词自动路由。历史保留的 `market_new_product_skill` 不作为当前前端入口展示。
+分析师配置位于 `app/analysts/*.yaml`。后端仍保留 `scenario_id` 兼容字段，但新请求推荐使用 `analyst_id`。历史保留的 `market_new_product_skill` 不作为当前前端入口展示。
 
 方法论拆分说明见 [analysis_direction_methodology.md](/Volumes/work/code/code_ai/ai_decision/ai-decision/docs/analysis_direction_methodology.md)：
 
 - Router 方法参考 `conf/指令选择Prompt.txt`，用于问题拆解、范围生成和模块选择。
 - 工作流与执行模板参考 `conf/黑板 - Agent X - 行研指令集 Consolidated Rev 0506.txt`，复用对比、时序、归因、推理等模板。
 - Agent 负责流程决策、状态流转、工具调用和停止条件。
-- Skill 负责专项分析方向的结构化产出和引用。
+- Skill 负责专项分析师的结构化产出和引用。
 
 ## 会话持久化
 
@@ -204,7 +205,7 @@ curl http://127.0.0.1:8000/api/sessions/{session_id}
 
 前端右侧“引用语料”边栏会根据分类表格中的引用编号展示对应语料片段，便于核查每类结论的证据来源。
 
-推荐停止规则已写入 [app/scenarios/market_trend_analysis.yaml](/Volumes/work/code/code_ai/ai_decision/ai-decision/app/scenarios/market_trend_analysis.yaml)：
+推荐停止规则已写入各个 AI 分析师配置，例如 [product_competitive_analyst.yaml](/Volumes/work/code/code_ai/ai_decision/ai-decision/app/analysts/product_competitive_analyst.yaml)：
 
 - `max_iterations: 3`：硬上限，避免无限扩张。
 - `max_entities_per_iteration: 4`：每轮最多扩展 4 个实体，控制 ES 查询量。
@@ -214,19 +215,20 @@ curl http://127.0.0.1:8000/api/sessions/{session_id}
 
 这套规则比单纯固定 3 轮更稳：既允许复杂问题继续扩展，也会在边际收益下降时及时收敛。
 
-## 场景配置
+## AI 分析师配置
 
-当前场景文件：[app/scenarios/market_trend_analysis.yaml](/Volumes/work/code/code_ai/ai_decision/ai-decision/app/scenarios/market_trend_analysis.yaml)
+当前 AI 分析师配置目录：[app/analysts](/Volumes/work/code/code_ai/ai_decision/ai-decision/app/analysts)
 
-该场景预置了：
+每个分析师预置了：
 
 - 数据源：Elasticsearch
-- 当前默认路线：`product_competitive_skill`
-- 指令模块：`G1/G2/G4/G7/G10/G12/G96`
-- 触发词：新品、上市、新品表现、市场反响、竞争分析、竞品、技术趋势、技术路线、路线图等
-- 反思检索：最多 3 轮，按关联实体补充证据，目标覆盖产品上市、市场反馈、销售/增长、渠道信号
+- 当前默认 Skill：如 `product_competitive_skill` 或 `tech_trend_skill`
+- 方法论配置：如 `product_competitive_analysis.yaml` 或 `product_tech_trend_research.yaml`
+- 指令模块：如 `G2/G7/G10` 或 `G4/G12/G96`
+- 触发词：竞品、竞争分析、技术趋势、技术路线、路线图等
+- 反思检索：最多 3 轮，按关联实体补充证据，目标覆盖对应证据维度
 
-后续新增“竞争格局分析”“技术路线图”“供应链分析”“政策影响分析”“风险分析”时，建议按同样方式新增 scenario 或 skill。
+后续新增“竞争格局分析师”“供应链分析师”“政策影响分析师”“风险分析师”时，建议优先新增 analyst YAML；只有产出逻辑明显不同再新增 Skill。
 
 ## ES Hybrid Search
 

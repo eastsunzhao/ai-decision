@@ -10,28 +10,38 @@
     <main id="directionGate" class="direction-gate hidden">
       <section class="gate-panel">
         <div class="gate-kicker">AI Decision Agent OS</div>
-        <h1>请选择分析方向</h1>
-        <p>选择后进入问答工作台，系统会按对应的分析框架组织检索、反思和结构化输出。</p>
+        <h1>请选择AI分析师</h1>
+        <p>选择后进入问答工作台，系统会按分析师绑定的方法论组织检索、反思和结构化输出。</p>
         <div class="gate-options">
           <button
             type="button"
             class="gate-card"
-            data-gate-direction="competitive"
-            data-direction-query="请对某产品开展系统性的竞争分析"
+            data-gate-analyst="product_competitive_analyst"
+            data-analyst-query="请对某产品开展系统性的竞争分析"
           >
             <span>01</span>
-            <strong>产品竞争分析</strong>
+            <strong>产品竞争分析师</strong>
             <small>对某产品开展系统性的竞争分析</small>
           </button>
           <button
             type="button"
             class="gate-card"
-            data-gate-direction="tech"
-            data-direction-query="请对某产品所处的技术领域进行系统性趋势研究"
+            data-gate-analyst="product_tech_trend_analyst"
+            data-analyst-query="请对某产品所处的技术领域进行系统性趋势研究"
           >
             <span>02</span>
-            <strong>产品技术趋势研究</strong>
+            <strong>产品技术趋势研究分析师</strong>
             <small>对某产品所处的技术领域进行系统性趋势研究</small>
+          </button>
+          <button
+            type="button"
+            class="gate-card"
+            data-gate-analyst="geely_tech_roadmap_analyst"
+            data-analyst-query="吉利汽车技术路线图分析"
+          >
+            <span>03</span>
+            <strong>吉利汽车技术路线图分析师</strong>
+            <small>吉利汽车技术路线图分析</small>
           </button>
         </div>
       </section>
@@ -63,8 +73,9 @@
 
         <section class="side-section">
           <div class="side-title">▣ 话题</div>
-          <button class="topic-item active" type="button">产品竞争分析</button>
-          <button class="topic-item" type="button">产品技术趋势研究</button>
+          <button class="topic-item active" type="button">产品竞争分析师</button>
+          <button class="topic-item" type="button">产品技术趋势研究分析师</button>
+          <button class="topic-item" type="button">吉利汽车技术路线图分析师</button>
         </section>
 
         <section class="side-block history-block">
@@ -157,7 +168,7 @@
         </section>
 
         <form id="chatForm" class="composer">
-          <textarea id="query" rows="3" placeholder="请先选择分析方向，可拖动右下角调整输入高度" required></textarea>
+          <textarea id="query" rows="3" placeholder="请先选择AI分析师，可拖动右下角调整输入高度" required></textarea>
           <button id="sendButton" type="submit" aria-label="发送问题">↑</button>
         </form>
       </aside>
@@ -168,8 +179,8 @@
       <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="directionModalTitle">
         <header class="modal-header">
           <div>
-            <h2 id="directionModalTitle">选择分析方向</h2>
-            <p>新建一个分析对话，系统会按所选方向组织检索和输出。</p>
+            <h2 id="directionModalTitle">选择AI分析师</h2>
+            <p>新建一个分析对话，系统会按所选分析师组织检索和输出。</p>
           </div>
           <button id="directionModalClose" class="icon-button" type="button" aria-label="关闭">×</button>
         </header>
@@ -177,22 +188,32 @@
           <button
             type="button"
             class="modal-option"
-            data-modal-direction="competitive"
-            data-direction-query="请对某产品开展系统性的竞争分析"
+            data-modal-analyst="product_competitive_analyst"
+            data-analyst-query="请对某产品开展系统性的竞争分析"
           >
             <span>01</span>
-            <strong>产品竞争分析</strong>
+            <strong>产品竞争分析师</strong>
             <small>对某产品开展系统性的竞争分析</small>
           </button>
           <button
             type="button"
             class="modal-option"
-            data-modal-direction="tech"
-            data-direction-query="请对某产品所处的技术领域进行系统性趋势研究"
+            data-modal-analyst="product_tech_trend_analyst"
+            data-analyst-query="请对某产品所处的技术领域进行系统性趋势研究"
           >
             <span>02</span>
-            <strong>产品技术趋势研究</strong>
+            <strong>产品技术趋势研究分析师</strong>
             <small>对某产品所处的技术领域进行系统性趋势研究</small>
+          </button>
+          <button
+            type="button"
+            class="modal-option"
+            data-modal-analyst="geely_tech_roadmap_analyst"
+            data-analyst-query="吉利汽车技术路线图分析"
+          >
+            <span>03</span>
+            <strong>吉利汽车技术路线图分析师</strong>
+            <small>吉利汽车技术路线图分析</small>
           </button>
         </div>
       </section>

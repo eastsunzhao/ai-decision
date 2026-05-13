@@ -140,17 +140,17 @@ class AgentWorkflow:
 
     def scenario_loader(self, state: ResearchState) -> ResearchState:
         state.scenario_config = self.scenario_manager.get_scenario(state.scenario_id) or {}
-        scenario = state.scenario_config or {}
-        directions = scenario.get("analysis_directions") or []
-        data_sources = scenario.get("data_sources") or []
-        workflow_order = scenario.get("workflow_order") or []
+        analyst = state.scenario_config or {}
+        data_sources = analyst.get("data_sources") or []
+        workflow_order = analyst.get("workflow_order") or []
         self._append_method_trace(
             state,
-            "scenario_loader",
-            "方法追踪：加载场景=%s；开放分析方向=%s；数据源=%s；工作流=%s。"
+            "analyst_loader",
+            "方法追踪：加载AI分析师=%s；skill=%s；方法论=%s；数据源=%s；工作流=%s。"
             % (
-                scenario.get("name", state.scenario_id),
-                "、".join(item.get("name", item.get("direction_id", "")) for item in directions) or "-",
+                analyst.get("name", state.scenario_id),
+                analyst.get("skill_id") or analyst.get("default_route", "-"),
+                analyst.get("methodology_config", "-"),
                 "、".join(item.get("type", "-") for item in data_sources) or "-",
                 " -> ".join(workflow_order) or "-",
             ),
@@ -499,6 +499,14 @@ class AgentWorkflow:
         )
 
     def _direction_for_skill(self, scenario: Dict[str, Any], skill_id: str) -> Optional[Dict[str, Any]]:
+        if scenario.get("analyst_id") and (scenario.get("skill_id") == skill_id or scenario.get("default_route") == skill_id):
+            return {
+                "direction_id": scenario.get("analyst_id"),
+                "name": scenario.get("name", scenario.get("analyst_id", "")),
+                "description": scenario.get("description", ""),
+                "skill_id": skill_id,
+                "methodology_config": scenario.get("methodology_config"),
+            }
         for direction in scenario.get("analysis_directions") or []:
             if direction.get("skill_id") == skill_id:
                 return direction
@@ -550,7 +558,7 @@ class AgentWorkflow:
 
     def _step_message(self, node_name: str, status: str) -> str:
         labels = {
-            "scenario_loader": "加载场景配置",
+            "scenario_loader": "加载AI分析师配置",
             "research_router": "识别问题路线",
             "task_plan_builder": "生成任务计划",
             "query_rewriter": "改写检索问题",

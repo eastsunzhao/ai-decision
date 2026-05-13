@@ -1,0 +1,53 @@
+analyst_id: geely_tech_roadmap_analyst
+name: 吉利汽车技术路线图分析师
+description: 围绕吉利汽车开展技术路线图分析，识别关键技术方向、演进阶段、产业协同和机会风险。
+default_query: 吉利汽车技术路线图分析
+skill_id: tech_trend_skill
+methodology_config: app/config/analysis_directions/product_tech_trend_research.yaml
+data_sources:
+  - type: elasticsearch
+    env:
+      url: ES_URL
+      index: ES_INDEX
+workflow_order:
+  - analyst_loader
+  - research_router
+  - task_plan_builder
+  - query_rewriter
+  - retrieval
+  - instruction_selector
+  - reflection_agent
+  - skill_executor
+  - synthesis
+  - citation_checker
+default_route: tech_trend_skill
+reflection:
+  enabled: true
+  max_iterations: 3
+  max_entities_per_iteration: 4
+  min_new_docs_per_iteration: 1
+  target_evidence_coverage: 0.75
+  retrieval_size_per_entity: 3
+skills:
+  tech_trend_skill:
+    name: 技术路线图分析
+    description: 对吉利汽车的智能驾驶、新能源、三电、座舱、平台架构等技术路线进行系统研究。
+    triggers:
+      - 吉利
+      - 吉利汽车
+      - 技术路线图
+      - 技术路线
+      - 智能驾驶
+      - 新能源
+      - 三电
+      - 座舱
+      - 平台架构
+    modules:
+      - G4
+      - G12
+      - G96
+    required_evidence:
+      - product_launch
+      - supply_signal
+      - competitor_signal
+      - technical_innovation_signal

@@ -25,7 +25,7 @@ const refreshSessionsButton = document.querySelector("#refreshSessionsButton");
 const newChatButton = document.querySelector("#newChatButton");
 const gate = document.querySelector("#directionGate");
 const appShell = document.querySelector("#appShell");
-const gateButtons = document.querySelectorAll("[data-gate-direction]");
+const gateButtons = document.querySelectorAll("[data-gate-analyst]");
 const workspaceTitle = document.querySelector("#workspaceTitle");
 const workspaceSubtitle = document.querySelector("#workspaceSubtitle");
 const welcomeText = document.querySelector("#welcomeText");
@@ -34,27 +34,34 @@ const drawerResizeHandle = document.querySelector("#drawerResizeHandle");
 const evidenceDrawer = document.querySelector("#evidenceDrawer");
 const directionModal = document.querySelector("#directionModal");
 const directionModalClose = document.querySelector("#directionModalClose");
-const modalDirectionButtons = document.querySelectorAll("[data-modal-direction]");
+const modalAnalystButtons = document.querySelectorAll("[data-modal-analyst]");
 const modalCloseTargets = document.querySelectorAll("[data-modal-close]");
-const DEFAULT_SCENARIO_ID = "market_trend_analysis";
+const DEFAULT_ANALYST_ID = "product_competitive_analyst";
 const DRAWER_WIDTH_KEY = "aiDecisionDrawerWidth";
 const DRAWER_MIN_WIDTH = 360;
 const DRAWER_MAX_WIDTH = 720;
 
-const directionConfig = {
-  competitive: {
-    title: "产品竞争分析",
+const analystConfig = {
+  product_competitive_analyst: {
+    title: "产品竞争分析师",
     subtitle: "围绕目标产品、竞品集合、渠道、差异化和风险机会进行系统研究。",
-    welcome: "已选择产品竞争分析。请在右侧输入具体产品、竞品或目标市场。",
+    welcome: "已选择产品竞争分析师。请在右侧输入具体产品、竞品或目标市场。",
     placeholder: "例如：请对片仔癀开展系统性的竞争分析",
     query: "请对某产品开展系统性的竞争分析",
   },
-  tech: {
-    title: "产品技术趋势研究",
+  product_tech_trend_analyst: {
+    title: "产品技术趋势研究分析师",
     subtitle: "围绕产品所处技术领域、演进阶段、趋势驱动和机会风险进行研究。",
-    welcome: "已选择产品技术趋势研究。请在右侧输入产品或技术领域。",
+    welcome: "已选择产品技术趋势研究分析师。请在右侧输入产品或技术领域。",
     placeholder: "例如：请对吉利汽车所处的智能驾驶技术领域进行系统性趋势研究",
     query: "请对某产品所处的技术领域进行系统性趋势研究",
+  },
+  geely_tech_roadmap_analyst: {
+    title: "吉利汽车技术路线图分析师",
+    subtitle: "围绕吉利汽车的核心技术路线、演进阶段、产业协同和机会风险进行研究。",
+    welcome: "已选择吉利汽车技术路线图分析师。请在右侧输入更具体的技术方向、车型或时间范围。",
+    placeholder: "例如：吉利汽车智能驾驶技术路线图分析",
+    query: "吉利汽车技术路线图分析",
   },
 };
 
@@ -62,8 +69,8 @@ const state = {
   busy: false,
   citationDetails: [],
   activeSessionId: null,
-  selectedDirection: null,
-  scenarioId: DEFAULT_SCENARIO_ID,
+  selectedAnalyst: DEFAULT_ANALYST_ID,
+  analystId: DEFAULT_ANALYST_ID,
 };
 
 function applyTheme(theme) {
@@ -148,7 +155,7 @@ function initDrawerResize() {
 function openDirectionModal() {
   directionModal.classList.remove("hidden");
   directionModal.setAttribute("aria-hidden", "false");
-  const firstOption = directionModal.querySelector("[data-modal-direction]");
+  const firstOption = directionModal.querySelector("[data-modal-analyst]");
   firstOption?.focus();
 }
 
@@ -158,9 +165,10 @@ function closeDirectionModal() {
   newChatButton.focus();
 }
 
-function enterDirection(direction, presetQuery) {
-  const config = directionConfig[direction] || directionConfig.competitive;
-  state.selectedDirection = direction;
+function enterAnalyst(analystId, presetQuery) {
+  const config = analystConfig[analystId] || analystConfig[DEFAULT_ANALYST_ID];
+  state.selectedAnalyst = analystId;
+  state.analystId = analystId;
   gate.classList.add("hidden");
   appShell.classList.remove("hidden");
   workspaceTitle.textContent = config.title;
@@ -547,7 +555,7 @@ async function submitQuestion(event) {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
-        scenario_id: state.scenarioId,
+        analyst_id: state.analystId,
         query,
       }),
     });
@@ -620,15 +628,15 @@ newChatButton.addEventListener("click", () => {
 });
 gateButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    enterDirection(button.dataset.gateDirection, button.dataset.directionQuery || "");
+    enterAnalyst(button.dataset.gateAnalyst, button.dataset.analystQuery || "");
   });
 });
-modalDirectionButtons.forEach((button) => {
+modalAnalystButtons.forEach((button) => {
   button.addEventListener("click", () => {
     state.activeSessionId = null;
-    state.selectedDirection = null;
+    state.selectedAnalyst = null;
     closeDirectionModal();
-    enterDirection(button.dataset.modalDirection, button.dataset.directionQuery || "");
+    enterAnalyst(button.dataset.modalAnalyst, button.dataset.analystQuery || "");
     loadSessions();
   });
 });
@@ -652,5 +660,5 @@ queryInput.addEventListener("keydown", (event) => {
 
 applyTheme();
 initDrawerResize();
-enterDirection("competitive", "");
+enterAnalyst(DEFAULT_ANALYST_ID, "");
 loadSessions();
