@@ -1,0 +1,42 @@
+{
+  "default_profile": "linux",
+  "profiles": {
+    "darwin": {
+      "read_only_dirs": [
+        "/bin",
+        "/sbin",
+        "/usr/bin",
+        "/usr/sbin",
+        "/usr/lib",
+        "/System/Library",
+        "/Library/Developer/CommandLineTools/usr/bin",
+        "/private/etc"
+      ],
+      "read_only_files": [
+        "/etc/hosts",
+        "/etc/resolv.conf"
+      ]
+    },
+    "linux": {
+      "read_only_dirs": [
+        "/bin",
+        "/usr/bin",
+        "/usr/local/bin",
+        "/lib",
+        "/lib64",
+        "/usr/lib",
+        "/usr/lib64",
+        "/usr/local/lib",
+        "/etc/alternatives",
+        "/etc/ssl"
+      ],
+      "read_only_files": [
+        "/etc/hosts",
+        "/etc/resolv.conf",
+        "/etc/nsswitch.conf",
+        "/etc/passwd",
+        "/etc/group"
+      ]
+    }
+  }
+}

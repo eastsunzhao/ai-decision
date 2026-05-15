@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DeepSeek Trace</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>DeepSeek Trace</h1>
+        <button id="refreshFiles" class="icon-button" title="刷新文件">↻</button>
+      </div>
+      <div class="toolbar">
+        <label>
+          <span>Records</span>
+          <select id="limitSelect">
+            <option value="100">100</option>
+            <option value="500" selected>500</option>
+            <option value="1000">1000</option>
+            <option value="5000">5000</option>
+            <option value="0">All</option>
+          </select>
+        </label>
+      </div>
+      <div id="fileList" class="file-list"></div>
+    </aside>
+
+    <main class="main">
+      <section class="topbar">
+        <div>
+          <div id="activeFile" class="active-file">No trace file selected</div>
+          <div id="summary" class="summary"></div>
+        </div>
+        <div class="filters">
+          <input id="searchInput" type="search" placeholder="Search prompt, response, model..." />
+          <button id="expandAll">Expand</button>
+          <button id="collapseAll">Collapse</button>
+        </div>
+      </section>
+
+      <section id="records" class="records">
+        <div class="empty">启动 DeepSeek trace 后，这里会显示调用 payload 和最终响应。</div>
+      </section>
+    </main>
+
+    <template id="recordTemplate">
+      <article class="record">
+        <button class="record-head">
+          <span class="mode"></span>
+          <span class="stamp"></span>
+          <span class="model"></span>
+          <span class="result"></span>
+          <span class="tokens"></span>
+        </button>
+        <div class="record-body">
+          <div class="grid">
+            <section class="panel payload-panel">
+              <h2>Payload</h2>
+              <div class="payload-blocks"></div>
+              <details>
+                <summary>Raw payload</summary>
+                <pre class="raw-payload"></pre>
+              </details>
+            </section>
+            <section class="panel response-panel">
+              <h2>Response</h2>
+              <div class="response-blocks"></div>
+              <details>
+                <summary>Raw response</summary>
+                <pre class="raw-response"></pre>
+              </details>
+            </section>
+          </div>
+        </div>
+      </article>
+    </template>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

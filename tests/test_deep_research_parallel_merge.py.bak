@@ -1,0 +1,637 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from skills_scope.deep_research_parallel import StepTask, _merge_findings, _write_wave_summaries
+from skills_scope.deep_research_parallel import _enforce_merged_findings_size_gate, _write_wave_context_pack
+from skills_scope.deep_research_parallel import _classify_failure_kind, _failure_reason_label
+from skills_scope.deep_research_parallel import _parse_deps, _ready_steps, build_parser, load_query_relax_packs, load_tasks_from_plan, run_parallel_plan
+
+
+def test_merge_findings_outputs_summary_and_links_only(tmp_path: Path):
+    findings_dir = tmp_path / "findings"
+    findings_dir.mkdir(parents=True, exist_ok=True)
+    merged = tmp_path / "findings.md"
+
+    step_body = """# Step S1 - Demo
+
+## Scope
+- question: demo question
+
+## Findings
+- 1. Alpha signal - first result
+- 2. Beta signal - second result
+- 3. Gamma signal - third result
+- 4. Delta signal - fourth result
+- 5. Epsilon signal - fifth result
+- 6. Zeta signal - should be truncated
+
+## Evidence
+- [Source A](https://a.example/path)
+- [Source B](https://b.example/path)
+- plain https://c.example/path
+
+## Completion Check
+- status: done
+"""
+    (findings_dir / "S1.md").write_text(step_body, encoding="utf-8")
+
+    tasks = [
+        StepTask(
+            id="S1",
+            step="Demo",
+            question="q",
+            deps=[],
+            research_type="Enumeration",
+            priority=1,
+            status="done",
+            attempt=0,
+            owner="wave-1",
+        )
+    ]
+
+    _merge_findings(tasks, findings_dir, merged)
+    text = merged.read_text(encoding="utf-8")
+
+    assert "- key_findings:" in text
+    assert "- links:" in text
+    assert "Alpha signal" in text
+    assert "Epsilon signal" in text
+    assert "Zeta signal - should be truncated" not in text
+    assert "https://a.example/path" in text
+    assert "https://b.example/path" in text
+    assert "https://c.example/path" in text
+    assert "## Scope" not in text
+    assert "## Evidence" not in text
+
+
+def test_merge_findings_prefers_compact_sidecar(tmp_path: Path):
+    findings_dir = tmp_path / "findings"
+    (findings_dir / ".compact").mkdir(parents=True, exist_ok=True)
+    merged = tmp_path / "findings.md"
+    (findings_dir / "S1.md").write_text("# Step S1\n\n## Findings\n- old\n", encoding="utf-8")
+    (findings_dir / ".compact" / "S1.json").write_text(
+        json.dumps(
+            {
+                "top_items": [
+                    {
+                        "title": "Compact item",
+                        "url": "https://compact.example/x",
+                        "snippet": "compact snippet",
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    tasks = [
+        StepTask(
+            id="S1",
+            step="Demo",
+            question="q",
+            deps=[],
+            research_type="Enumeration",
+            priority=1,
+            status="done",
+            attempt=0,
+            owner="wave-1",
+        )
+    ]
+    _merge_findings(tasks, findings_dir, merged)
+    text = merged.read_text(encoding="utf-8")
+    assert "Compact item - compact snippet" in text
+    assert "https://compact.example/x" in text
+
+
+def test_write_wave_summaries_keeps_recent_two(tmp_path: Path):
+    findings_dir = tmp_path / "findings"
+    entries = [
+        "### Wave 1\n- done_steps: S1\n",
+        "### Wave 2\n- done_steps: S2\n",
+        "### Wave 3\n- done_steps: S3\n",
+    ]
+    _write_wave_summaries(findings_dir, entries)
+    text = (findings_dir / "wave_summaries.md").read_text(encoding="utf-8")
+    assert "### Wave 1" not in text
+    assert "### Wave 2" in text
+    assert "### Wave 3" in text
+
+
+def test_write_wave_context_pack_uses_compact_and_respects_budget(tmp_path: Path):
+    findings_dir = tmp_path / "findings"
+    (findings_dir / ".compact").mkdir(parents=True, exist_ok=True)
+    (findings_dir / ".compact" / "S1.json").write_text(
+        json.dumps({"id": "S1", "top_items": [{"title": "A", "url": "https://a.example"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    tasks = [
+        StepTask("S1", "Done", "q1", [], "Enumeration", 1, "done", 0, "wave-1"),
+        StepTask("S2", "Ready", "q2", ["S1"], "Comparison", 2, "pending", 0, "main"),
+    ]
+    ready = [tasks[1]]
+    _write_wave_context_pack(findings_dir=findings_dir, ready_steps=ready, tasks=tasks, budget_chars=300)
+    text = (findings_dir / "wave_context.json").read_text(encoding="utf-8")
+    assert '"ready_steps"' in text
+    assert '"S2"' in text
+
+
+def test_merged_findings_size_gate_reduces_content(tmp_path: Path):
+    findings_dir = tmp_path / "findings"
+    (findings_dir / ".compact").mkdir(parents=True, exist_ok=True)
+    merged = tmp_path / "findings.md"
+    (findings_dir / ".compact" / "S1.json").write_text(
+        json.dumps(
+            {
+                "top_items": [
+                    {"title": f"T{i}", "url": f"https://e.example/{i}", "snippet": "x" * 80}
+                    for i in range(1, 6)
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    tasks = [StepTask("S1", "Demo", "q", [], "Enumeration", 1, "done", 0, "wave-1")]
+    _merge_findings(tasks, findings_dir, merged, max_findings_per_step=5, max_links_per_step=5)
+    _enforce_merged_findings_size_gate(
+        tasks=tasks, findings_dir=findings_dir, merged_path=merged, budget_chars=240
+    )
+    text = merged.read_text(encoding="utf-8")
+    assert text.count("https://e.example/") <= 3
+
+
+def test_parser_accepts_default_scope():
+    parser = build_parser()
+    args = parser.parse_args(["--scope", "default"])
+    assert args.scope == "default"
+
+
+def test_parse_deps_accepts_dash_as_empty():
+    assert _parse_deps("-") == []
+    assert _parse_deps("[ - ]") == []
+    assert _parse_deps("[1, -, 2]") == ["1", "2"]
+
+
+def test_classify_failure_kind_marks_no_data_for_empty_hits() -> None:
+    evidence = {
+        "exit_code": 0,
+        "stderr": "",
+        "parse_error": None,
+        "data_failure_reason": "no_hits",
+    }
+    assert _classify_failure_kind(evidence) == "no_data"
+    assert _failure_reason_label("no_data", evidence) == "no_data(no_hits)"
+
+
+def test_classify_failure_kind_keeps_infra_error_on_command_failure() -> None:
+    evidence = {
+        "exit_code": 1,
+        "stderr": "command timed out",
+        "parse_error": "empty output",
+        "data_failure_reason": "empty",
+    }
+    assert _classify_failure_kind(evidence) == "infra_error"
+    assert _failure_reason_label("infra_error", evidence) == "infra_error"
+
+
+def test_ready_steps_treats_done_no_data_as_dependency_satisfied() -> None:
+    tasks = [
+        StepTask("S1", "NoData", "q1", [], "Enumeration", 1, "done_no_data", 1, "main:no_data_done"),
+        StepTask("S2", "Downstream", "q2", ["S1"], "Comparison", 2, "pending", 0, "main"),
+    ]
+    ready = _ready_steps(tasks)
+    assert [t.id for t in ready] == ["S2"]
+
+
+def test_merge_findings_ignores_done_no_data_steps(tmp_path: Path) -> None:
+    findings_dir = tmp_path / "findings"
+    findings_dir.mkdir(parents=True, exist_ok=True)
+    merged = tmp_path / "findings.md"
+    (findings_dir / "S1.md").write_text("# Step S1\n\n## Findings\n- no data\n", encoding="utf-8")
+    tasks = [
+        StepTask("S1", "NoData", "q1", [], "Enumeration", 1, "done_no_data", 1, "main:no_data_done"),
+    ]
+    _merge_findings(tasks, findings_dir, merged)
+    text = merged.read_text(encoding="utf-8")
+    assert "## S1" not in text
+    assert "source_file: findings/S1.md" not in text
+
+
+def test_wave_context_pack_excludes_done_no_data_dependency_context(tmp_path: Path) -> None:
+    findings_dir = tmp_path / "findings"
+    (findings_dir / ".compact").mkdir(parents=True, exist_ok=True)
+    (findings_dir / ".compact" / "S1.json").write_text(
+        json.dumps({"id": "S1", "top_items": [{"title": "ShouldNotAppear", "url": "https://x.example"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    tasks = [
+        StepTask("S1", "NoData", "q1", [], "Enumeration", 1, "done_no_data", 1, "main:no_data_done"),
+        StepTask("S2", "Downstream", "q2", ["S1"], "Comparison", 2, "pending", 0, "main"),
+    ]
+    _write_wave_context_pack(findings_dir=findings_dir, ready_steps=[tasks[1]], tasks=tasks, budget_chars=1000)
+    payload = json.loads((findings_dir / "wave_context.json").read_text(encoding="utf-8"))
+    dep_ctx = payload.get("dependency_context")
+    assert isinstance(dep_ctx, list)
+    assert dep_ctx == []
+
+
+def test_load_tasks_from_plan_rejects_unknown_dep(tmp_path: Path):
+    plan = tmp_path / "plan.md"
+    plan.write_text(
+        "\n".join(
+            [
+                "# Plan",
+                "",
+                "## Task Table",
+                "",
+                "| id | step | question | deps | research_type | priority | status | attempt | owner |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| 1 | A | qa | [] | x | 1 | pending | 0 | main |",
+                "| 2 | B | qb | [99] | x | 1 | pending | 0 | main |",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="unknown deps"):
+        load_tasks_from_plan(plan)
+
+
+def test_load_tasks_from_plan_rejects_cycle(tmp_path: Path):
+    plan = tmp_path / "plan.md"
+    plan.write_text(
+        "\n".join(
+            [
+                "# Plan",
+                "",
+                "## Task Table",
+                "",
+                "| id | step | question | deps | research_type | priority | status | attempt | owner |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| 1 | A | qa | [2] | x | 1 | pending | 0 | main |",
+                "| 2 | B | qb | [1] | x | 1 | pending | 0 | main |",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="cyclic deps detected"):
+        load_tasks_from_plan(plan)
+
+
+def test_load_query_relax_packs_parses_primary_rewrites_and_must_keep() -> None:
+    lines = [
+        "# Plan",
+        "",
+        "## Query Relax Packs",
+        "",
+        "- S1:",
+        "  - primary: sk hynix nand 2023-2025 trend",
+        "  - relax_2: sk hynix storage chip trend",
+        "  - relax_1: sk hynix nand pricing trend",
+        "  - must_keep_terms: sk hynix, nand, 2023-2025",
+        "",
+        "## Wave Execution Log",
+    ]
+    packs = load_query_relax_packs(lines)
+    assert "S1" in packs
+    pack = packs["S1"]
+    assert pack["primary"] == "sk hynix nand 2023-2025 trend"
+    assert pack["planned_rewrites"] == ["sk hynix nand pricing trend", "sk hynix storage chip trend"]
+    assert pack["must_keep_terms"] == ["sk hynix", "nand", "2023-2025"]
+
+
+def test_load_query_relax_packs_supports_chinese_header_and_fields() -> None:
+    lines = [
+        "# Plan",
+        "",
+        "## 查询放松词包",
+        "",
+        "- S1:",
+        "  - 主查询: 海力士 NAND 价格趋势 2023-2025",
+        "  - 放松_2: 海力士 存储芯片 趋势",
+        "  - 放松_1: 海力士 NAND 现货价格 趋势",
+        "  - 必保词: 海力士, NAND, 2023-2025",
+        "",
+        "## Wave Execution Log",
+    ]
+    packs = load_query_relax_packs(lines)
+    assert "S1" in packs
+    pack = packs["S1"]
+    assert pack["primary"] == "海力士 NAND 价格趋势 2023-2025"
+    assert pack["planned_rewrites"] == ["海力士 NAND 现货价格 趋势", "海力士 存储芯片 趋势"]
+    assert pack["must_keep_terms"] == ["海力士", "NAND", "2023-2025"]
+
+
+def test_load_query_relax_packs_accepts_header_suffix_and_fullwidth_colon() -> None:
+    lines = [
+        "# Plan",
+        "",
+        "## Query Relax Packs (scope-specific rules)",
+        "",
+        "- S1（市场）:",
+        "  - primary：primary query",
+        "  - relax_1：relax one",
+        "  - must_keep_terms：nand, 2023-2025",
+        "",
+        "## Wave Execution Log",
+    ]
+    packs = load_query_relax_packs(lines)
+    assert "S1" in packs
+    pack = packs["S1"]
+    assert pack["primary"] == "primary query"
+    assert pack["planned_rewrites"] == ["relax one"]
+    assert pack["must_keep_terms"] == ["nand", "2023-2025"]
+
+
+def test_load_query_relax_packs_parses_markdown_step_heading_style() -> None:
+    lines = [
+        "# Plan",
+        "",
+        "## 查询放松词包",
+        "",
+        "### 步骤1：市场规模与增长趋势",
+        "- 主查询：global hvdc market size 2024",
+        "- 放松_1：hvdc market growth report",
+        "- 放松_2：high voltage dc transmission market trend",
+        "- 必保词：hvdc, market",
+        "",
+        "## Wave Execution Log",
+    ]
+    packs = load_query_relax_packs(lines)
+    assert "1" in packs
+    pack = packs["1"]
+    assert pack["primary"] == "global hvdc market size 2024"
+    assert pack["planned_rewrites"] == [
+        "hvdc market growth report",
+        "high voltage dc transmission market trend",
+    ]
+    assert pack["must_keep_terms"] == ["hvdc", "market"]
+
+
+def test_run_parallel_plan_passes_query_relax_pack_to_step_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    plan = tmp_path / "plan.md"
+    findings_dir = tmp_path / "findings"
+    merged = tmp_path / "findings.md"
+    plan.write_text(
+        "\n".join(
+            [
+                "# Plan",
+                "",
+                "## Runtime Controls",
+                "- max_parallel: 1",
+                "- retry_limit_per_step: 1",
+                "",
+                "## Task Table",
+                "",
+                "| id | step | question | deps | research_type | priority | status | attempt | owner |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| S1 | Demo | base query | [] | x | 1 | pending | 0 | main |",
+                "",
+                "## Query Relax Packs",
+                "- S1:",
+                "  - primary: primary query",
+                "  - relax_1: relax one",
+                "  - relax_2: relax two",
+                "  - must_keep_terms: nand, 2023-2025",
+                "",
+                "## Wave Execution Log",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    captured: list[dict[str, object]] = []
+
+    async def _fake_run_one_step(task, scope, findings_dir_path, **kwargs):
+        captured.append(
+            {
+                "task_id": task.id,
+                "planned_primary": kwargs.get("planned_primary"),
+                "planned_rewrites": kwargs.get("planned_rewrites"),
+                "must_keep_terms": kwargs.get("must_keep_terms"),
+                "rewrite_policy": kwargs.get("rewrite_policy"),
+            }
+        )
+        evidence = {
+            "exit_code": 0,
+            "items": [{"title": "ok", "url": "https://a.example"}],
+            "data_satisfactory": True,
+            "data_failure_reason": None,
+            "parse_error": None,
+            "stderr": "",
+        }
+        return task.id, True, str(findings_dir_path / "S1.md"), "none", evidence
+
+    monkeypatch.setattr("skills_scope.deep_research_parallel._run_one_step", _fake_run_one_step)
+
+    exit_code = asyncio.run(
+        run_parallel_plan(
+            plan_path=plan,
+            findings_dir=findings_dir,
+            merged_findings=merged,
+            scope="forum",
+            max_parallel_override=None,
+            retry_limit_override=None,
+            max_waves=3,
+            require_parallel=False,
+            log_file=None,
+            rewrite_count=3,
+            rewrite_policy="plan_first",
+            min_results=1,
+            min_domains=1,
+            enable_broad_fallback=True,
+            query_timeout_seconds=30.0,
+            progress_interval_seconds=1.0,
+            slow_step_threshold_seconds=1.0,
+        )
+    )
+
+    assert exit_code == 0
+    assert len(captured) == 1
+    row = captured[0]
+    assert row["task_id"] == "S1"
+    assert row["planned_primary"] == "primary query"
+    assert row["planned_rewrites"] == ["relax one", "relax two"]
+    assert row["must_keep_terms"] == ["nand", "2023-2025"]
+    assert row["rewrite_policy"] == "plan_first"
+
+
+def test_run_parallel_plan_matches_query_relax_pack_step_alias(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    plan = tmp_path / "plan.md"
+    findings_dir = tmp_path / "findings"
+    merged = tmp_path / "findings.md"
+    plan.write_text(
+        "\n".join(
+            [
+                "# Plan",
+                "",
+                "## Runtime Controls",
+                "- max_parallel: 1",
+                "- retry_limit_per_step: 1",
+                "",
+                "## Task Table",
+                "",
+                "| id | step | question | deps | research_type | priority | status | attempt | owner |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| 1 | Demo | base query | [] | x | 1 | pending | 0 | main |",
+                "",
+                "## Query Relax Packs",
+                "- S1:",
+                "  - primary: alias primary query",
+                "  - relax_1: alias relax one",
+                "  - must_keep_terms: hvdc",
+                "",
+                "## Wave Execution Log",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    captured: list[dict[str, object]] = []
+
+    async def _fake_run_one_step(task, scope, findings_dir_path, **kwargs):
+        captured.append(
+            {
+                "task_id": task.id,
+                "planned_primary": kwargs.get("planned_primary"),
+                "planned_rewrites": kwargs.get("planned_rewrites"),
+                "must_keep_terms": kwargs.get("must_keep_terms"),
+            }
+        )
+        evidence = {
+            "exit_code": 0,
+            "items": [{"title": "ok", "url": "https://a.example"}],
+            "data_satisfactory": True,
+            "data_failure_reason": None,
+            "parse_error": None,
+            "stderr": "",
+        }
+        return task.id, True, str(findings_dir_path / "1.md"), "none", evidence
+
+    monkeypatch.setattr("skills_scope.deep_research_parallel._run_one_step", _fake_run_one_step)
+
+    exit_code = asyncio.run(
+        run_parallel_plan(
+            plan_path=plan,
+            findings_dir=findings_dir,
+            merged_findings=merged,
+            scope="forum",
+            max_parallel_override=None,
+            retry_limit_override=None,
+            max_waves=2,
+            require_parallel=False,
+            log_file=None,
+            rewrite_count=3,
+            rewrite_policy="plan_first",
+            min_results=1,
+            min_domains=1,
+            enable_broad_fallback=True,
+            query_timeout_seconds=30.0,
+            progress_interval_seconds=1.0,
+            slow_step_threshold_seconds=1.0,
+        )
+    )
+
+    assert exit_code == 0
+    assert len(captured) == 1
+    row = captured[0]
+    assert row["task_id"] == "1"
+    assert row["planned_primary"] == "alias primary query"
+    assert row["planned_rewrites"] == ["alias relax one"]
+    assert row["must_keep_terms"] == ["hvdc"]
+
+
+def test_run_parallel_plan_matches_markdown_step_heading_pack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    plan = tmp_path / "plan.md"
+    findings_dir = tmp_path / "findings"
+    merged = tmp_path / "findings.md"
+    plan.write_text(
+        "\n".join(
+            [
+                "# Plan",
+                "",
+                "## Runtime Controls",
+                "- max_parallel: 1",
+                "- retry_limit_per_step: 1",
+                "",
+                "## Task Table",
+                "",
+                "| id | step | question | deps | research_type | priority | status | attempt | owner |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| 1 | Demo | base query | [] | x | 1 | pending | 0 | main |",
+                "",
+                "## 查询放松词包",
+                "### 步骤1：示例",
+                "- 主查询：heading primary query",
+                "- 放松_1：heading relax one",
+                "- 必保词：hvdc",
+                "",
+                "## Wave Execution Log",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    captured: list[dict[str, object]] = []
+
+    async def _fake_run_one_step(task, scope, findings_dir_path, **kwargs):
+        captured.append(
+            {
+                "task_id": task.id,
+                "planned_primary": kwargs.get("planned_primary"),
+                "planned_rewrites": kwargs.get("planned_rewrites"),
+                "must_keep_terms": kwargs.get("must_keep_terms"),
+            }
+        )
+        evidence = {
+            "exit_code": 0,
+            "items": [{"title": "ok", "url": "https://a.example"}],
+            "data_satisfactory": True,
+            "data_failure_reason": None,
+            "parse_error": None,
+            "stderr": "",
+        }
+        return task.id, True, str(findings_dir_path / "1.md"), "none", evidence
+
+    monkeypatch.setattr("skills_scope.deep_research_parallel._run_one_step", _fake_run_one_step)
+
+    exit_code = asyncio.run(
+        run_parallel_plan(
+            plan_path=plan,
+            findings_dir=findings_dir,
+            merged_findings=merged,
+            scope="forum",
+            max_parallel_override=None,
+            retry_limit_override=None,
+            max_waves=2,
+            require_parallel=False,
+            log_file=None,
+            rewrite_count=3,
+            rewrite_policy="plan_first",
+            min_results=1,
+            min_domains=1,
+            enable_broad_fallback=True,
+            query_timeout_seconds=30.0,
+            progress_interval_seconds=1.0,
+            slow_step_threshold_seconds=1.0,
+        )
+    )
+
+    assert exit_code == 0
+    assert len(captured) == 1
+    row = captured[0]
+    assert row["task_id"] == "1"
+    assert row["planned_primary"] == "heading primary query"
+    assert row["planned_rewrites"] == ["heading relax one"]
+    assert row["must_keep_terms"] == ["hvdc"]

@@ -1,0 +1,5 @@
+# Base install for local development on this repo.
+# Matrix E2EE support is optional and can require extra native build tooling on Windows.
+-e ./nanobot
+Flask>=3.0.0,<4.0.0
+socksio>=1.0.0

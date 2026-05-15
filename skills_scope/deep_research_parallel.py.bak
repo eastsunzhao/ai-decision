@@ -1,0 +1,1456 @@
+"""Dependency-aware parallel executor for deep-research plan.md."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import importlib.util
+import json
+import os
+import sys
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+import re
+import traceback
+from typing import Any
+
+from skills_scope.orchestrator import evidence_is_satisfactory, run_scope_query_adaptive
+
+
+_LOG_TRUNC = 8192
+_STEP_TOP_K = 5
+_SNIPPET_MAX_CHARS = 160
+_WAVE_SUMMARY_KEEP = 2
+_WAVE_CONTEXT_BUDGET_CHARS = 12000
+_MERGED_FINDINGS_BUDGET_CHARS = 14000
+_SUBPROCESS_PREVIEW_MAX_CHARS = 300
+_NO_DATA_FAILURE_REASONS = frozenset({"empty", "no_hits", "all_irrelevant"})
+_STATUS_ALIASES = {
+    "in_progress": "running",
+    "completed": "done",
+    "done(no_data)": "done_no_data",
+}
+_RECOVERABLE_STALE_STATES = frozenset({"running", "in_progress"})
+_DATA_FAILURE_REASON_TEXT = {
+    "empty": "no data returned",
+    "no_hits": "no relevant hits found",
+    "all_irrelevant": "retrieved items are irrelevant",
+    "low_quality": "evidence quality is too low",
+    "bad_exit": "upstream query command failed",
+}
+_DEPENDENCY_SATISFIED_STATUSES = frozenset({"done", "done_no_data"})
+_EVIDENCE_BEARING_DONE_STATUSES = frozenset({"done"})
+_QUERY_RELAX_PACKS_HEADERS = frozenset({"## query relax packs", "## 查询放松词包"})
+
+
+def _utc_ts() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _trunc(text: str, max_len: int = _LOG_TRUNC) -> str:
+    t = text or ""
+    if len(t) <= max_len:
+        return t
+    return t[: max_len - 20] + "\n... [truncated] ..."
+
+
+def _default_log_path(findings_dir: Path) -> Path:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return findings_dir / ".parallel_executor" / f"run-{stamp}.log"
+
+
+def _append_log(log_path: Path | None, lines: list[str]) -> None:
+    if log_path is None or not lines:
+        return
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    ts = _utc_ts()
+    parts = [f"[{ts}] {lines[0]}"] + lines[1:]
+    with log_path.open("a", encoding="utf-8") as f:
+        f.write("\n".join(parts) + "\n")
+
+
+def _emit_progress(log_path: Path | None, message: str) -> None:
+    _append_log(log_path, [message])
+    print(message)
+    print(message, file=sys.stderr)
+
+
+def _compact_preview(text: Any, max_len: int = _SUBPROCESS_PREVIEW_MAX_CHARS) -> str:
+    normalized = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not normalized:
+        return ""
+    limit = max(8, int(max_len))
+    if len(normalized) <= limit:
+        return normalized
+    suffix = " ...[truncated]"
+    keep = max(1, limit - len(suffix))
+    return normalized[:keep].rstrip() + suffix
+
+
+def _command_preview(command: Any) -> str:
+    if isinstance(command, list):
+        return " ".join(str(part) for part in command if str(part or "").strip())
+    return str(command or "").strip()
+
+
+def _normalize_data_failure_reason(reason: Any) -> str:
+    text = str(reason or "").strip().lower()
+    return text
+
+
+def _friendly_data_failure_reason(reason: Any) -> str:
+    code = _normalize_data_failure_reason(reason)
+    if not code:
+        return "insufficient evidence"
+    return _DATA_FAILURE_REASON_TEXT.get(code, code)
+
+
+def _classify_failure_kind(evidence: dict[str, Any]) -> str:
+    if _is_infra_error(
+        stderr=str(evidence.get("stderr") or ""),
+        parse_error=evidence.get("parse_error") if isinstance(evidence.get("parse_error"), str) else None,
+        exit_code=int(evidence.get("exit_code", 1)),
+    ):
+        return "infra_error"
+    reason = _normalize_data_failure_reason(evidence.get("data_failure_reason"))
+    if reason in _NO_DATA_FAILURE_REASONS:
+        return "no_data"
+    return "data_error"
+
+
+def _failure_reason_label(failure_kind: str, evidence: dict[str, Any] | None = None) -> str:
+    if not isinstance(evidence, dict):
+        return failure_kind
+    reason = _normalize_data_failure_reason(evidence.get("data_failure_reason"))
+    if failure_kind == "no_data" and reason:
+        return f"no_data({reason})"
+    if failure_kind == "data_error" and reason:
+        return f"data_error({reason})"
+    return failure_kind
+
+
+def _is_no_data_failure(evidence: dict[str, Any] | None = None, *, failure_kind: str | None = None) -> bool:
+    if str(failure_kind or "").strip().lower() == "no_data":
+        return True
+    if not isinstance(evidence, dict):
+        return False
+    reason = _normalize_data_failure_reason(evidence.get("data_failure_reason"))
+    return reason in _NO_DATA_FAILURE_REASONS
+
+
+def _log_run_banner(
+    log_path: Path | None,
+    *,
+    plan_path: Path,
+    findings_dir: Path,
+    merged_findings: Path,
+    scope: str,
+    max_parallel: int,
+    retry_limit: int,
+    max_waves: int,
+    require_parallel: bool,
+    rewrite_count: int,
+    rewrite_policy: str,
+    min_results: int,
+    min_domains: int,
+    enable_broad_fallback: bool,
+    query_timeout_seconds: float,
+    query_relax_pack_steps: int,
+) -> None:
+    if log_path is None:
+        return
+    pydantic_available = importlib.util.find_spec("pydantic") is not None
+    _append_log(
+        log_path,
+        [
+            "=== parallel executor start ===",
+            f"  plan: {plan_path}",
+            f"  findings_dir: {findings_dir}",
+            f"  merged_findings: {merged_findings}",
+            f"  scope: {scope}",
+            f"  max_parallel: {max_parallel}",
+            f"  retry_limit: {retry_limit}",
+            f"  max_waves: {max_waves}",
+            f"  require_parallel: {require_parallel}",
+            f"  rewrite_count: {rewrite_count}",
+            f"  rewrite_policy: {rewrite_policy}",
+            f"  min_results: {min_results}",
+            f"  min_domains: {min_domains}",
+            f"  enable_broad_fallback: {enable_broad_fallback}",
+            f"  query_relax_pack_steps: {query_relax_pack_steps}",
+            f"  query_timeout_seconds: {query_timeout_seconds}",
+            f"  python_executable: {sys.executable}",
+            f"  nb_python_env: {(os.environ.get('NB_PYTHON', '') or '(unset)')}",
+            f"  pydantic_available: {pydantic_available}",
+            f"  log_file: {log_path}",
+        ],
+    )
+
+
+def _log_step_evidence(log_path: Path | None, *, wave: int, task_id: str, ok: bool, failure_kind: str, evidence: dict[str, Any]) -> None:
+    if log_path is None:
+        return
+    items = evidence.get("items")
+    n_items = len(items) if isinstance(items, list) else 0
+    if ok:
+        head = f"wave={wave} step={task_id} ok=true exit_code={evidence.get('exit_code')} items={n_items}"
+        rs = evidence.get("relevance_summary")
+        if isinstance(rs, dict) and rs:
+            head += f" relevance_summary={rs!r}"
+        _append_log(log_path, [head])
+        return
+    head = (
+        f"wave={wave} step={task_id} ok=false failure_kind={failure_kind} "
+        f"exit_code={evidence.get('exit_code')} items={n_items} "
+        f"data_failure_reason={evidence.get('data_failure_reason')!r}"
+    )
+    lines = [
+        head,
+        f"  parse_error: {evidence.get('parse_error')!r}",
+    ]
+    stderr = str(evidence.get("stderr") or "")
+    if stderr:
+        lines.append("  stderr:")
+        for sub in _trunc(stderr).splitlines():
+            lines.append(f"    {sub}")
+    exc_tb = evidence.get("traceback")
+    if isinstance(exc_tb, str) and exc_tb.strip():
+        lines.append("  traceback:")
+        for sub in _trunc(exc_tb).splitlines():
+            lines.append(f"    {sub}")
+    cmd = evidence.get("command")
+    if cmd is not None:
+        lines.append(f"  command: {_trunc(repr(cmd), max_len=4000)}")
+    _append_log(log_path, lines)
+
+
+TASK_TABLE_HEADER = "| id | step | question | deps | research_type | priority | status | attempt | owner |"
+_EMPTY_DEP_MARKERS = {"-", "—", "–", "none", "null", "nil", "na", "n/a", "无", "无依赖"}
+
+
+@dataclass
+class StepTask:
+    id: str
+    step: str
+    question: str
+    deps: list[str]
+    research_type: str
+    priority: int
+    status: str
+    attempt: int
+    owner: str
+
+
+def _parse_deps(raw: str) -> list[str]:
+    text = (raw or "").strip()
+    if not text:
+        return []
+    if text.startswith("[") and text.endswith("]"):
+        text = text[1:-1].strip()
+    if not text:
+        return []
+    if text.lower() in _EMPTY_DEP_MARKERS or text in _EMPTY_DEP_MARKERS:
+        return []
+    if not text:
+        return []
+    out: list[str] = []
+    for part in text.split(","):
+        token = part.strip().strip("\"'")
+        if not token:
+            continue
+        if token.lower() in _EMPTY_DEP_MARKERS or token in _EMPTY_DEP_MARKERS:
+            continue
+        out.append(token)
+    return out
+
+
+def _split_csv_terms(raw: str) -> list[str]:
+    text = str(raw or "").strip()
+    if not text:
+        return []
+    parts = re.split(r"[;,，；]", text)
+    out: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        item = part.strip()
+        key = item.lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
+
+
+def _is_query_relax_packs_header(line: str) -> bool:
+    normalized = str(line or "").strip().lower()
+    if not normalized:
+        return False
+    for header in _QUERY_RELAX_PACKS_HEADERS:
+        if normalized == header:
+            return True
+        # allow suffix notes like "## 查询放松词包 （限制...）"
+        if normalized.startswith(header + " "):
+            return True
+        if normalized.startswith(header + "(") or normalized.startswith(header + "（"):
+            return True
+    return False
+
+
+def _step_id_aliases(step_id: str) -> list[str]:
+    sid = str(step_id or "").strip()
+    if not sid:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def _add(value: str) -> None:
+        token = str(value or "").strip()
+        if not token:
+            return
+        if token in seen:
+            return
+        seen.add(token)
+        out.append(token)
+
+    _add(sid)
+    _add(sid.upper())
+    _add(sid.lower())
+    if sid.isdigit():
+        _add(f"S{sid}")
+        _add(f"s{sid}")
+    elif len(sid) > 1 and sid[0].lower() == "s" and sid[1:].isdigit():
+        _add(sid[1:])
+    return out
+
+
+def _lookup_query_relax_pack(
+    query_relax_packs: dict[str, dict[str, Any]] | Any, step_id: str
+) -> tuple[dict[str, Any], str | None]:
+    if not isinstance(query_relax_packs, dict):
+        return {}, None
+    for alias in _step_id_aliases(step_id):
+        pack = query_relax_packs.get(alias)
+        if isinstance(pack, dict):
+            return pack, alias
+    return {}, None
+
+
+def _extract_query_relax_step_id(line: str) -> str | None:
+    text = str(line or "").strip()
+    if not text:
+        return None
+
+    bullet_step_re = re.compile(r"^\s*-\s*([A-Za-z0-9._-]+)(?:\s*[（(].*?[)）])?\s*[:：]\s*$")
+    bullet_named_step_re = re.compile(r"^\s*-\s*(?:step|步骤)\s*([A-Za-z]?\d+)(?:\s*[（(].*?[)）])?\s*[:：]\s*$", re.IGNORECASE)
+    heading_step_re = re.compile(r"^\s*#{2,6}\s*(?:step|步骤)\s*([A-Za-z]?\d+)\b", re.IGNORECASE)
+    heading_raw_id_re = re.compile(r"^\s*#{2,6}\s*([A-Za-z]?\d+)\s*(?:[:：\-]|$)", re.IGNORECASE)
+
+    for regex in (bullet_step_re, bullet_named_step_re, heading_step_re, heading_raw_id_re):
+        matched = regex.match(text)
+        if matched:
+            sid = str(matched.group(1) or "").strip()
+            if sid:
+                return sid
+    return None
+
+
+def load_query_relax_packs(plan_lines: list[str]) -> dict[str, dict[str, Any]]:
+    packs: dict[str, dict[str, Any]] = {}
+    header_idx = -1
+    for i, line in enumerate(plan_lines):
+        if _is_query_relax_packs_header(line):
+            header_idx = i
+            break
+    if header_idx < 0:
+        return packs
+
+    step_id: str | None = None
+    primary_by_step: dict[str, str] = {}
+    relax_by_step: dict[str, dict[int, str]] = {}
+    must_keep_by_step: dict[str, list[str]] = {}
+    field_re = re.compile(
+        r"^\s*-\s*(primary|主查询|relax_\d+|放松_\d+|must_keep_terms|必保词|保留词)\s*[:：]\s*(.*)\s*$",
+        re.IGNORECASE,
+    )
+
+    for i in range(header_idx + 1, len(plan_lines)):
+        line = plan_lines[i]
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            break
+        if not stripped:
+            continue
+
+        field_match = field_re.match(line)
+        if field_match and step_id:
+            raw_key = field_match.group(1).strip()
+            key = raw_key.lower()
+            value = field_match.group(2).strip()
+            if key in {"primary", "主查询"}:
+                if value:
+                    primary_by_step[step_id] = value
+            elif key in {"must_keep_terms", "必保词", "保留词"}:
+                must_keep_by_step[step_id] = _split_csv_terms(value)
+            elif key.startswith("relax_") or key.startswith("放松_"):
+                try:
+                    idx = int(key.split("_", 1)[1])
+                except (TypeError, ValueError):
+                    idx = 999
+                if value:
+                    relax_by_step.setdefault(step_id, {})[idx] = value
+            continue
+
+        parsed_step_id = _extract_query_relax_step_id(line)
+        if parsed_step_id:
+            step_id = parsed_step_id
+            continue
+
+    for sid in sorted({*primary_by_step.keys(), *relax_by_step.keys(), *must_keep_by_step.keys()}):
+        relax_map = relax_by_step.get(sid, {})
+        rewrites: list[str] = []
+        seen: set[str] = set()
+        for _, item in sorted(relax_map.items(), key=lambda kv: kv[0]):
+            text = str(item or "").strip()
+            key = text.lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            rewrites.append(text)
+        packs[sid] = {
+            "primary": primary_by_step.get(sid),
+            "planned_rewrites": rewrites,
+            "must_keep_terms": must_keep_by_step.get(sid, []),
+        }
+    return packs
+
+
+def _validate_task_graph(tasks: list[StepTask]) -> None:
+    if not tasks:
+        raise ValueError("Task Table has no tasks")
+
+    ids = [t.id for t in tasks]
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for sid in ids:
+        if sid in seen:
+            duplicates.append(sid)
+        seen.add(sid)
+
+    id_set = set(ids)
+    errors: list[str] = []
+    if duplicates:
+        errors.append(f"duplicate task ids: {sorted(set(duplicates))}")
+
+    for task in tasks:
+        if task.id in task.deps:
+            errors.append(f"task {task.id!r} depends on itself")
+        unknown = sorted({dep for dep in task.deps if dep not in id_set})
+        if unknown:
+            errors.append(f"task {task.id!r} has unknown deps: {unknown}")
+
+    if errors:
+        raise ValueError("Task graph validation failed: " + "; ".join(errors))
+
+    adj: dict[str, list[str]] = {t.id: [dep for dep in t.deps if dep in id_set] for t in tasks}
+    visit_state: dict[str, int] = {}  # 0=unseen,1=visiting,2=done
+    stack: list[str] = []
+
+    def _dfs(node: str) -> str | None:
+        visit_state[node] = 1
+        stack.append(node)
+        for dep in adj.get(node, []):
+            state = visit_state.get(dep, 0)
+            if state == 0:
+                cycle = _dfs(dep)
+                if cycle:
+                    return cycle
+            elif state == 1:
+                idx = stack.index(dep)
+                return " -> ".join(stack[idx:] + [dep])
+        stack.pop()
+        visit_state[node] = 2
+        return None
+
+    for sid in ids:
+        if visit_state.get(sid, 0) != 0:
+            continue
+        cycle_path = _dfs(sid)
+        if cycle_path:
+            raise ValueError(f"Task graph validation failed: cyclic deps detected: {cycle_path}")
+
+
+def _fmt_deps(deps: list[str]) -> str:
+    if not deps:
+        return "[]"
+    return "[" + ",".join(deps) + "]"
+
+
+def _parse_table_row(line: str) -> StepTask | None:
+    parts = [p.strip() for p in line.strip().split("|")]
+    # leading/trailing pipes create empty columns at edges
+    if len(parts) < 11:
+        return None
+    _, sid, step, question, deps, rtype, priority, status, attempt, owner, _ = parts[:11]
+    if sid.lower() == "id" or not sid:
+        return None
+    try:
+        pr = int(priority or "99")
+    except ValueError:
+        pr = 99
+    try:
+        at = int(attempt or "0")
+    except ValueError:
+        at = 0
+    raw_status = (status or "pending").strip().lower()
+    normalized_status = _STATUS_ALIASES.get(raw_status, raw_status)
+
+    return StepTask(
+        id=sid,
+        step=step,
+        question=question,
+        deps=_parse_deps(deps),
+        research_type=rtype,
+        priority=pr,
+        status=normalized_status,
+        attempt=at,
+        owner=owner or "main",
+    )
+
+
+def load_tasks_from_plan(plan_path: Path) -> tuple[list[str], list[StepTask], int, int]:
+    text = plan_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+
+    max_parallel = 2
+    retry_limit = 2
+    mp = re.search(r"^- max_parallel:\s*(\d+)\s*$", text, re.MULTILINE)
+    rl = re.search(r"^- retry_limit_per_step:\s*(\d+)\s*$", text, re.MULTILINE)
+    if mp:
+        max_parallel = max(1, int(mp.group(1)))
+    if rl:
+        retry_limit = max(0, int(rl.group(1)))
+
+    header_idx = -1
+    for i, line in enumerate(lines):
+        if line.strip().lower() == TASK_TABLE_HEADER.lower():
+            header_idx = i
+            break
+    if header_idx < 0:
+        raise ValueError("Task Table header not found in plan.md")
+
+    tasks: list[StepTask] = []
+    i = header_idx + 2  # skip separator row
+    while i < len(lines):
+        line = lines[i]
+        if not line.strip().startswith("|"):
+            break
+        task = _parse_table_row(line)
+        if task:
+            tasks.append(task)
+        i += 1
+    _validate_task_graph(tasks)
+    return lines, tasks, max_parallel, retry_limit
+
+
+def save_tasks_to_plan(plan_path: Path, original_lines: list[str], tasks: list[StepTask], wave_log: str) -> None:
+    lines = list(original_lines)
+    header_idx = -1
+    for i, line in enumerate(lines):
+        if line.strip().lower() == TASK_TABLE_HEADER.lower():
+            header_idx = i
+            break
+    if header_idx < 0:
+        raise ValueError("Task Table header not found in plan.md")
+
+    start = header_idx + 2
+    end = start
+    while end < len(lines) and lines[end].strip().startswith("|"):
+        end += 1
+
+    row_lines = [
+        f"| {t.id} | {t.step} | {t.question} | {_fmt_deps(t.deps)} | {t.research_type} | {t.priority} | {t.status} | {t.attempt} | {t.owner} |"
+        for t in tasks
+    ]
+    lines[start:end] = row_lines
+
+    # append wave log under existing Wave Execution Log section
+    insert_at = -1
+    for i, line in enumerate(lines):
+        if line.strip().lower() == "## wave execution log":
+            insert_at = i + 1
+            break
+    if insert_at > 0:
+        lines.insert(insert_at, wave_log.rstrip())
+        lines.insert(insert_at + 1, "")
+    else:
+        lines.append("")
+        lines.append("## Wave Execution Log")
+        lines.append(wave_log.rstrip())
+
+    plan_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+
+def _ready_steps(tasks: list[StepTask]) -> list[StepTask]:
+    done = {t.id for t in tasks if t.status in _DEPENDENCY_SATISFIED_STATUSES}
+    out: list[StepTask] = []
+    for t in tasks:
+        if t.status != "pending":
+            continue
+        if all(dep in done for dep in t.deps):
+            out.append(t)
+    out.sort(key=lambda x: (x.priority, x.id))
+    return out
+
+
+def _build_step_markdown(task: StepTask, evidence: dict[str, Any]) -> str:
+    items = evidence.get("items")
+    if not isinstance(items, list):
+        items = []
+    sat = evidence_is_satisfactory(evidence)
+    no_data = _is_no_data_failure(evidence)
+    top_rows = items[:_STEP_TOP_K]
+    lines = [
+        f"# Step {task.id} - {task.step or task.id}",
+        "",
+        "## Scope",
+        f"- question: {task.question}",
+        f"- research_type: {task.research_type}",
+        f"- query_used: {str(evidence.get('query_used') or task.question)}",
+        f"- query_round: {str(evidence.get('query_round') or 'R1')}",
+        "",
+        "## Findings",
+    ]
+    if not top_rows:
+        lines.append("- no_high_quality_evidence_found")
+    else:
+        if not sat:
+            reason = _friendly_data_failure_reason(evidence.get("data_failure_reason"))
+            lines.append(f"- data_quality: failed ({reason})")
+        for idx, row in enumerate(top_rows, start=1):
+            if not isinstance(row, dict):
+                continue
+            title = str(row.get("title") or "(untitled)")
+            snippet = str(row.get("snippet") or "").strip()
+            lines.append(f"- {idx}. {title}" + (f" - {snippet[:_SNIPPET_MAX_CHARS]}" if snippet else ""))
+
+    lines.extend(["", "## Evidence"])
+    if not top_rows:
+        lines.append("- none")
+    else:
+        for row in top_rows:
+            if not isinstance(row, dict):
+                continue
+            title = str(row.get("title") or "(untitled)")
+            url = str(row.get("url") or "").strip()
+            if url:
+                lines.append(f"- [{title}]({url})")
+            else:
+                lines.append(f"- {title}")
+
+    lines.extend(
+        [
+            "",
+            "## Completion Check",
+            f"- exit_code: {int(evidence.get('exit_code', 1))}",
+            f"- item_count: {len(items)}",
+            "- status: done" if sat else ("- status: done(no_data)" if no_data else "- status: needs_replan"),
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def _compact_payload(task: StepTask, evidence: dict[str, Any]) -> dict[str, Any]:
+    rows = evidence.get("items")
+    items = rows if isinstance(rows, list) else []
+    compact_items: list[dict[str, Any]] = []
+    for row in items[:_STEP_TOP_K]:
+        if not isinstance(row, dict):
+            continue
+        compact_items.append(
+            {
+                "title": str(row.get("title") or "(untitled)")[:180],
+                "url": str(row.get("url") or "").strip(),
+                "source": str(row.get("source") or "").strip(),
+                "time": row.get("time"),
+                "snippet": str(row.get("snippet") or "").strip()[:_SNIPPET_MAX_CHARS],
+                "relevance": row.get("relevance"),
+            }
+        )
+    return {
+        "id": task.id,
+        "step": task.step or task.id,
+        "question": task.question,
+        "research_type": task.research_type,
+        "query_used": str(evidence.get("query_used") or task.question),
+        "query_round": str(evidence.get("query_round") or "R1"),
+        "exit_code": int(evidence.get("exit_code", 1)),
+        "item_count": len(items),
+        "data_satisfactory": bool(evidence.get("data_satisfactory", False)),
+        "data_failure_reason": evidence.get("data_failure_reason"),
+        "relevance_summary": evidence.get("relevance_summary")
+        if isinstance(evidence.get("relevance_summary"), dict)
+        else {},
+        "top_items": compact_items,
+    }
+
+
+async def _run_one_step(
+    task: StepTask,
+    scope: str,
+    findings_dir: Path,
+    *,
+    rewrite_count: int,
+    min_results: int,
+    min_domains: int,
+    enable_broad_fallback: bool,
+    rewrite_policy: str,
+    planned_primary: str | None,
+    planned_rewrites: list[str] | None,
+    must_keep_terms: list[str] | None,
+    query_timeout_seconds: float,
+    on_subprocess_event: Any | None = None,
+) -> tuple[str, bool, str, str, dict[str, Any]]:
+    subprocess_events: list[dict[str, Any]] = []
+
+    def _collect_subprocess_output(payload: Any) -> None:
+        if isinstance(payload, dict):
+            subprocess_events.append(dict(payload))
+
+    try:
+        evidence = await asyncio.to_thread(
+            run_scope_query_adaptive,
+            scope,
+            task.question,
+            timeout_seconds=max(10.0, float(query_timeout_seconds)),
+            rewrite_count=max(1, int(rewrite_count)),
+            min_results=max(1, int(min_results)),
+            min_domains=max(1, int(min_domains)),
+            enable_broad_fallback=bool(enable_broad_fallback),
+            rewrite_policy=str(rewrite_policy or "auto_only").strip().lower() or "auto_only",
+            planned_primary=planned_primary,
+            planned_rewrites=planned_rewrites or [],
+            must_keep_terms=must_keep_terms or [],
+            conservative_for_default=True,
+            on_subprocess_output=_collect_subprocess_output,
+        )
+    except BaseException as exc:
+        if callable(on_subprocess_event):
+            for event in subprocess_events:
+                try:
+                    on_subprocess_event(task.id, event)
+                except Exception:
+                    pass
+        evidence = {
+            "exit_code": 1,
+            "stderr": str(exc),
+            "parse_error": "exception_in_run_scope_query",
+            "items": [],
+            "command": None,
+            "traceback": traceback.format_exc(),
+        }
+        return task.id, False, "", "infra_error", evidence
+
+    if callable(on_subprocess_event):
+        for event in subprocess_events:
+            try:
+                on_subprocess_event(task.id, event)
+            except Exception:
+                pass
+
+    ok = evidence_is_satisfactory(evidence)
+    failure_kind = "none"
+    if not ok:
+        failure_kind = _classify_failure_kind(evidence)
+    out_file = findings_dir / f"{task.id}.md"
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    out_file.write_text(_build_step_markdown(task, evidence), encoding="utf-8")
+    compact_file = findings_dir / ".compact" / f"{task.id}.json"
+    compact_file.parent.mkdir(parents=True, exist_ok=True)
+    compact_file.write_text(
+        json.dumps(_compact_payload(task, evidence), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return task.id, ok, str(out_file), failure_kind, evidence
+
+
+def _is_infra_error(*, stderr: str, parse_error: str | None, exit_code: int) -> bool:
+    text = (stderr or "").lower()
+    if "timed out" in text or "timeout" in text:
+        return True
+    if "not found" in text or "not recognized as an internal or external command" in text:
+        return True
+    if "command blocked by scope policy" in text or "command blocked by safety guard" in text:
+        return True
+    if parse_error == "empty output" and exit_code != 0:
+        return True
+    return False
+
+
+def _extract_section_bullets(markdown_text: str, section: str, *, limit: int = 5) -> list[str]:
+    """Extract top bullet lines under a markdown section header."""
+    lines = (markdown_text or "").splitlines()
+    header = f"## {section}".strip().lower()
+    start = -1
+    for i, line in enumerate(lines):
+        if line.strip().lower() == header:
+            start = i + 1
+            break
+    if start < 0:
+        return []
+
+    out: list[str] = []
+    for i in range(start, len(lines)):
+        raw = lines[i].strip()
+        if raw.startswith("## "):
+            break
+        if raw.startswith("- "):
+            item = raw[2:].strip()
+            if item:
+                out.append(item)
+                if len(out) >= max(1, int(limit)):
+                    break
+    return out
+
+
+def _extract_markdown_links(text: str, *, limit: int = 5) -> list[str]:
+    """Extract URL targets from markdown links and plain URLs."""
+    if not text:
+        return []
+    links: list[str] = []
+    seen: set[str] = set()
+
+    for match in re.findall(r"\[[^\]]+\]\((https?://[^)\s]+)\)", text):
+        url = str(match).strip()
+        if url and url not in seen:
+            seen.add(url)
+            links.append(url)
+            if len(links) >= max(1, int(limit)):
+                return links
+
+    for match in re.findall(r"https?://[^\s)>]+", text):
+        url = str(match).strip()
+        if url and url not in seen:
+            seen.add(url)
+            links.append(url)
+            if len(links) >= max(1, int(limit)):
+                return links
+    return links
+
+
+def _build_step_summary(step_text: str) -> tuple[list[str], list[str]]:
+    """Build compact summary fields from one step markdown file."""
+    findings = _extract_section_bullets(step_text, "Findings", limit=5)
+    evidence_lines = _extract_section_bullets(step_text, "Evidence", limit=8)
+    links = _extract_markdown_links("\n".join(evidence_lines), limit=5)
+
+    if not findings:
+        fallback = re.sub(r"\s+", " ", (step_text or "")).strip()
+        if fallback:
+            findings = [fallback[:300]]
+    return findings[:5], links[:5]
+
+
+def _load_step_compact(findings_dir: Path, step_id: str) -> dict[str, Any] | None:
+    fp = findings_dir / ".compact" / f"{step_id}.json"
+    if not fp.exists():
+        return None
+    try:
+        data = json.loads(fp.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _compact_findings_and_links(compact: dict[str, Any]) -> tuple[list[str], list[str]]:
+    items = compact.get("top_items")
+    rows = items if isinstance(items, list) else []
+    findings: list[str] = []
+    links: list[str] = []
+    seen: set[str] = set()
+    for idx, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            continue
+        title = str(row.get("title") or "(untitled)").strip()
+        snippet = str(row.get("snippet") or "").strip()
+        findings.append(f"{idx}. {title}" + (f" - {snippet}" if snippet else ""))
+        url = str(row.get("url") or "").strip()
+        if url and url not in seen:
+            seen.add(url)
+            links.append(url)
+    return findings[:5], links[:5]
+
+
+def _build_wave_summary_entry(
+    *,
+    wave: int,
+    ready: list[StepTask],
+    launched: list[StepTask],
+    done_ids: list[str],
+    fail_ids: list[str],
+    fail_reasons: list[str],
+    findings_dir: Path,
+) -> str:
+    lines = [
+        f"### Wave {wave}",
+        f"- ready_steps: {', '.join([t.id for t in ready]) if ready else '(none)'}",
+        f"- launched_steps: {', '.join([t.id for t in launched]) if launched else '(none)'}",
+        f"- done_steps: {', '.join(done_ids) if done_ids else '(none)'}",
+        f"- failed_steps: {', '.join(fail_ids) if fail_ids else '(none)'}",
+        f"- failed_reasons: {', '.join(fail_reasons) if fail_reasons else '(none)'}",
+    ]
+    for sid in done_ids[:_STEP_TOP_K]:
+        compact = _load_step_compact(findings_dir, sid)
+        if not isinstance(compact, dict):
+            continue
+        key_rows, _ = _compact_findings_and_links(compact)
+        if not key_rows:
+            continue
+        lines.append(f"- {sid}_key_findings:")
+        for row in key_rows[:3]:
+            lines.append(f"  - {row}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _write_wave_summaries(findings_dir: Path, entries: list[str]) -> None:
+    if not entries:
+        return
+    keep = entries[-max(1, _WAVE_SUMMARY_KEEP) :]
+    lines = ["# Wave Summaries (Compact)", ""]
+    lines.extend(keep)
+    out = findings_dir / "wave_summaries.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+
+def _merge_findings(
+    tasks: list[StepTask],
+    findings_dir: Path,
+    merged_path: Path,
+    *,
+    max_findings_per_step: int = 5,
+    max_links_per_step: int = 5,
+) -> None:
+    lines = ["# Merged Findings (Main Thread Only)", ""]
+    for t in sorted(tasks, key=lambda x: x.id):
+        if t.status not in _EVIDENCE_BEARING_DONE_STATUSES:
+            continue
+        fp = findings_dir / f"{t.id}.md"
+        if not fp.exists():
+            continue
+        lines.append(f"## {t.id} - {t.step or t.id}")
+        lines.append(f"- source_file: findings/{t.id}.md")
+        compact = _load_step_compact(findings_dir, t.id)
+        if isinstance(compact, dict):
+            key_findings, links = _compact_findings_and_links(compact)
+        else:
+            body = fp.read_text(encoding="utf-8")
+            key_findings, links = _build_step_summary(body)
+        lines.append("- key_findings:")
+        if key_findings:
+            for item in key_findings[: max(1, int(max_findings_per_step))]:
+                lines.append(f"  - {item}")
+        else:
+            lines.append("  - (none)")
+        lines.append("- links:")
+        if links:
+            for url in links[: max(1, int(max_links_per_step))]:
+                lines.append(f"  - {url}")
+        else:
+            lines.append("  - (none)")
+        lines.append("")
+    merged_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+
+def _write_wave_context_pack(
+    *,
+    findings_dir: Path,
+    ready_steps: list[StepTask],
+    tasks: list[StepTask],
+    budget_chars: int = _WAVE_CONTEXT_BUDGET_CHARS,
+) -> None:
+    done_map = {t.id: t for t in tasks if t.status in _EVIDENCE_BEARING_DONE_STATUSES}
+    pack: dict[str, Any] = {"ready_steps": [], "dependency_context": [], "notes": "compact-only context pack"}
+    for t in ready_steps:
+        pack["ready_steps"].append(
+            {"id": t.id, "step": t.step, "question": t.question, "deps": list(t.deps), "research_type": t.research_type}
+        )
+        for dep in t.deps:
+            if dep not in done_map:
+                continue
+            compact = _load_step_compact(findings_dir, dep)
+            if not compact:
+                continue
+            pack["dependency_context"].append(compact)
+
+    # Keep recent/most relevant dependency entries only when exceeding budget.
+    while len(json.dumps(pack, ensure_ascii=False)) > max(2000, int(budget_chars)):
+        dep_rows = pack.get("dependency_context")
+        if isinstance(dep_rows, list) and dep_rows:
+            dep_rows.pop(0)
+            continue
+        ready_rows = pack.get("ready_steps")
+        if isinstance(ready_rows, list) and len(ready_rows) > 1:
+            ready_rows.pop(0)
+            continue
+        break
+
+    out = findings_dir / "wave_context.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(pack, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _enforce_merged_findings_size_gate(
+    *,
+    tasks: list[StepTask],
+    findings_dir: Path,
+    merged_path: Path,
+    budget_chars: int = _MERGED_FINDINGS_BUDGET_CHARS,
+) -> None:
+    if not merged_path.exists():
+        return
+    size = len(merged_path.read_text(encoding="utf-8"))
+    if size <= max(2000, int(budget_chars)):
+        return
+    _merge_findings(
+        tasks,
+        findings_dir,
+        merged_path,
+        max_findings_per_step=3,
+        max_links_per_step=3,
+    )
+
+
+async def run_parallel_plan(
+    *,
+    plan_path: Path,
+    findings_dir: Path,
+    merged_findings: Path,
+    scope: str,
+    max_parallel_override: int | None,
+    retry_limit_override: int | None,
+    max_waves: int,
+    require_parallel: bool,
+    log_file: Path | None,
+    rewrite_count: int,
+    rewrite_policy: str,
+    min_results: int,
+    min_domains: int,
+    enable_broad_fallback: bool,
+    query_timeout_seconds: float,
+    progress_interval_seconds: float,
+    slow_step_threshold_seconds: float,
+) -> int:
+    findings_dir.mkdir(parents=True, exist_ok=True)
+    merged_findings.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        lines, tasks, max_parallel_cfg, retry_limit_cfg = load_tasks_from_plan(plan_path)
+    except Exception as exc:
+        _append_log(
+            log_file,
+            [
+                "=== parallel executor (plan load failed) ===",
+                f"  plan: {plan_path}",
+                f"  error: {exc!r}",
+            ],
+        )
+        raise
+    max_parallel = max_parallel_override if max_parallel_override is not None else max_parallel_cfg
+    retry_limit = retry_limit_override if retry_limit_override is not None else retry_limit_cfg
+    query_relax_packs = load_query_relax_packs(lines)
+
+    _log_run_banner(
+        log_file,
+        plan_path=plan_path,
+        findings_dir=findings_dir,
+        merged_findings=merged_findings,
+        scope=scope,
+        max_parallel=max_parallel,
+        retry_limit=retry_limit,
+        max_waves=max_waves,
+        require_parallel=require_parallel,
+        rewrite_count=rewrite_count,
+        rewrite_policy=rewrite_policy,
+        min_results=min_results,
+        min_domains=min_domains,
+        enable_broad_fallback=enable_broad_fallback,
+        query_timeout_seconds=query_timeout_seconds,
+        query_relax_pack_steps=len(query_relax_packs),
+    )
+
+    # Recover stale states left by interrupted previous runs.
+    recovered_running = [t.id for t in tasks if t.status in _RECOVERABLE_STALE_STATES]
+    if recovered_running:
+        for t in tasks:
+            if t.status in _RECOVERABLE_STALE_STATES:
+                t.status = "pending"
+                t.owner = "main:recovered"
+        _append_log(
+            log_file,
+            [
+                "recovered stale running/in_progress steps to pending",
+                f"  recovered_step_ids: {recovered_running}",
+            ],
+        )
+
+    wave = 0
+    wave_summaries: list[str] = []
+    while wave < max_waves:
+        pending = [t for t in tasks if t.status == "pending"]
+        if not pending:
+            break
+
+        ready = _ready_steps(tasks)
+        if not ready:
+            stale_running = [t.id for t in tasks if t.status in _RECOVERABLE_STALE_STATES]
+            if stale_running:
+                for t in tasks:
+                    if t.status in _RECOVERABLE_STALE_STATES:
+                        t.status = "pending"
+                        t.owner = "main:recovered"
+                _append_log(
+                    log_file,
+                    [
+                        "no ready steps but stale running/in_progress found; recovered to pending and continue",
+                        f"  recovered_step_ids: {stale_running}",
+                        f"  task_status: {[(x.id, x.status) for x in tasks]}",
+                    ],
+                )
+                continue
+
+            # no runnable tasks, likely blocked by failed deps
+            status_by_id = {t.id: t.status for t in tasks}
+            for t in pending:
+                if any(status_by_id.get(dep) == "blocked" for dep in t.deps):
+                    t.status = "blocked"
+            _append_log(
+                log_file,
+                [
+                    "no ready steps (dependency block); stopping wave loop",
+                    f"  pending_task_ids: {[t.id for t in pending]}",
+                    f"  task_status: {[(x.id, x.status) for x in tasks]}",
+                ],
+            )
+            break
+
+        wave += 1
+        launched = ready[: max(1, max_parallel)]
+        parallel_required = len(ready) >= 2
+        parallel_satisfied = (not parallel_required) or (len(launched) >= 2)
+        blocker_reason = ""
+        if require_parallel and parallel_required and not parallel_satisfied:
+            blocker_reason = "max_parallel_or_runtime_constraints_prevented_required_parallel_launch"
+            _append_log(
+                log_file,
+                [
+                    f"parallel compliance exit: wave={wave} blocker_reason={blocker_reason!r}",
+                    f"  ready_steps: {[t.id for t in ready]} max_parallel={max_parallel}",
+                ],
+            )
+            wave_log = (
+                f"### Wave {wave}\n"
+                f"- ready_steps: {', '.join([t.id for t in ready])}\n"
+                f"- launched_steps: {', '.join([t.id for t in launched]) if launched else '(none)'}\n"
+                f"- done_steps: (none)\n"
+                f"- failed_steps: {', '.join([t.id for t in ready])}\n"
+                f"- parallel_required: true\n"
+                f"- parallel_satisfied: false\n"
+                f"- blocker_reason: {blocker_reason}\n"
+            )
+            save_tasks_to_plan(plan_path, lines, tasks, wave_log)
+            _merge_findings(tasks, findings_dir, merged_findings)
+            _append_log(log_file, ["=== exit 1 (parallel compliance) ==="])
+            return 1
+
+        for t in launched:
+            t.status = "running"
+            t.owner = f"wave-{wave}"
+
+        def _emit_step_subprocess(task_id: str, payload: dict[str, Any]) -> None:
+            if not isinstance(payload, dict):
+                return
+            round_id = str(payload.get("round") or "R1").strip() or "R1"
+            query_text = _compact_preview(payload.get("query_text"))
+            if query_text:
+                _emit_progress(log_file, f"wave={wave} step={task_id} round={round_id} query={query_text}")
+            cmd_text = _compact_preview(_command_preview(payload.get("command")))
+            if cmd_text:
+                _emit_progress(log_file, f"wave={wave} step={task_id} round={round_id} cmd={cmd_text}")
+            stdout_text = _compact_preview(payload.get("stdout"))
+            if stdout_text:
+                _emit_progress(log_file, f"wave={wave} step={task_id} round={round_id} stdout={stdout_text}")
+            stderr_text = _compact_preview(payload.get("stderr"))
+            if stderr_text:
+                _emit_progress(log_file, f"wave={wave} step={task_id} round={round_id} stderr={stderr_text}")
+            try:
+                exit_code = int(payload.get("exit_code"))
+            except (TypeError, ValueError):
+                exit_code = None
+            if exit_code is not None:
+                _emit_progress(log_file, f"wave={wave} step={task_id} round={round_id} exit_code={exit_code}")
+
+        _emit_progress(
+            log_file,
+            (
+                f"wave={wave} launched={ [t.id for t in launched] } "
+                f"timeout={query_timeout_seconds:.1f}s"
+            ),
+        )
+        _write_wave_context_pack(findings_dir=findings_dir, ready_steps=ready, tasks=tasks)
+
+        start_by_id: dict[str, float] = {t.id: time.monotonic() for t in launched}
+        slow_reported: set[str] = set()
+        result_by_id: dict[str, tuple[str, bool, str, str, dict[str, Any]] | BaseException] = {}
+
+        pending: dict[asyncio.Task[tuple[str, bool, str, str, dict[str, Any]]], StepTask] = {}
+        for t in launched:
+            pack, matched_key = _lookup_query_relax_pack(query_relax_packs, t.id)
+            if matched_key and matched_key != t.id:
+                _emit_progress(log_file, f"wave={wave} step={t.id} query_relax_pack=alias({matched_key})")
+            elif not pack and isinstance(query_relax_packs, dict) and query_relax_packs:
+                policy = str(rewrite_policy or "").strip().lower()
+                if policy in {"plan_first", "plan_only"}:
+                    _emit_progress(log_file, f"wave={wave} step={t.id} query_relax_pack=missing policy={policy}")
+            coro = _run_one_step(
+                t,
+                scope,
+                findings_dir,
+                rewrite_count=rewrite_count,
+                rewrite_policy=rewrite_policy,
+                planned_primary=str(pack.get("primary") or "").strip() or None,
+                planned_rewrites=list(pack.get("planned_rewrites") or []),
+                must_keep_terms=list(pack.get("must_keep_terms") or []),
+                min_results=min_results,
+                min_domains=min_domains,
+                enable_broad_fallback=enable_broad_fallback,
+                query_timeout_seconds=query_timeout_seconds,
+                on_subprocess_event=_emit_step_subprocess,
+            )
+            pending[asyncio.create_task(coro)] = t
+
+        heartbeat_every = max(1.0, float(progress_interval_seconds))
+        slow_threshold = max(1.0, float(slow_step_threshold_seconds))
+        while pending:
+            done_set, pending_set = await asyncio.wait(
+                set(pending.keys()),
+                timeout=heartbeat_every,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            now = time.monotonic()
+            for task_ref in done_set:
+                step_task = pending.pop(task_ref)
+                elapsed = now - start_by_id.get(step_task.id, now)
+                try:
+                    step_result = task_ref.result()
+                    result_by_id[step_task.id] = step_result
+                    _, ok, _, failure_kind, evidence = step_result
+                    no_data_done = _is_no_data_failure(evidence, failure_kind=failure_kind)
+                    if ok or no_data_done:
+                        suffix = " (no_data)" if (not ok and no_data_done) else ""
+                        _emit_progress(log_file, f"wave={wave} step={step_task.id} done{suffix} elapsed={elapsed:.1f}s")
+                    else:
+                        reason_label = _failure_reason_label(failure_kind, evidence)
+                        _emit_progress(
+                            log_file,
+                            f"wave={wave} step={step_task.id} failed elapsed={elapsed:.1f}s reason={reason_label}",
+                        )
+                except BaseException as exc:
+                    result_by_id[step_task.id] = exc
+                    _emit_progress(
+                        log_file,
+                        f"wave={wave} step={step_task.id} failed elapsed={elapsed:.1f}s reason=exception",
+                    )
+
+            if pending_set:
+                running_ids = [pending[p].id for p in pending_set if p in pending]
+                for sid in running_ids:
+                    elapsed = now - start_by_id.get(sid, now)
+                    if elapsed >= slow_threshold and sid not in slow_reported:
+                        slow_reported.add(sid)
+                        _emit_progress(log_file, f"wave={wave} step={sid} slow_query elapsed={elapsed:.1f}s")
+
+                done_count = len(launched) - len(pending_set)
+                _emit_progress(
+                    log_file,
+                    f"wave={wave} heartbeat running={running_ids} done={done_count}/{len(launched)}",
+                )
+
+        results: list[tuple[str, bool, str, str, dict[str, Any]] | BaseException] = [
+            result_by_id.get(t.id, RuntimeError(f"missing_step_result:{t.id}")) for t in launched
+        ]
+
+        done_ids: list[str] = []
+        fail_ids: list[str] = []
+        fail_reasons: list[str] = []
+        for t, result in zip(launched, results):
+            if isinstance(result, BaseException):
+                tb_text = "".join(traceback.format_exception(type(result), result, result.__traceback__))
+                tb_lines = [f"  {ln}" for ln in _trunc(tb_text).splitlines()]
+                _append_log(
+                    log_file,
+                    [f"gather unexpected exception step={t.id}: {result!r}"] + tb_lines,
+                )
+                t.attempt += 1
+                if t.attempt > retry_limit:
+                    t.status = "blocked"
+                else:
+                    t.status = "pending"
+                fail_ids.append(t.id)
+                t.owner = "main:infra_error"
+                fail_reasons.append(f"{t.id}=infra_error(exception)")
+                continue
+
+            _, ok, _, failure_kind, evidence = result
+            _log_step_evidence(
+                log_file,
+                wave=wave,
+                task_id=t.id,
+                ok=ok,
+                failure_kind=failure_kind,
+                evidence=evidence,
+            )
+            no_data_done = _is_no_data_failure(evidence, failure_kind=failure_kind)
+            if ok or no_data_done:
+                t.status = "done_no_data" if no_data_done and not ok else "done"
+                t.owner = "main:no_data_done" if no_data_done and not ok else t.owner
+                done_ids.append(t.id)
+            else:
+                t.attempt += 1
+                if t.attempt > retry_limit:
+                    t.status = "blocked"
+                else:
+                    t.status = "needs_replan"
+                fail_ids.append(t.id)
+                t.owner = f"main:{failure_kind}"
+                fail_reasons.append(f"{t.id}={_failure_reason_label(failure_kind, evidence)}")
+
+        wave_log = (
+            f"### Wave {wave}\n"
+            f"- ready_steps: {', '.join([t.id for t in ready])}\n"
+            f"- launched_steps: {', '.join([t.id for t in launched])}\n"
+            f"- done_steps: {', '.join(done_ids) if done_ids else '(none)'}\n"
+            f"- failed_steps: {', '.join(fail_ids) if fail_ids else '(none)'}\n"
+            f"- failed_reasons: {', '.join(fail_reasons) if fail_reasons else '(none)'}\n"
+            f"- parallel_required: {'true' if parallel_required else 'false'}\n"
+            f"- parallel_satisfied: {'true' if parallel_satisfied else 'false'}\n"
+            f"- blocker_reason: {blocker_reason or '(none)'}\n"
+        )
+        wave_summaries.append(
+            _build_wave_summary_entry(
+                wave=wave,
+                ready=ready,
+                launched=launched,
+                done_ids=done_ids,
+                fail_ids=fail_ids,
+                fail_reasons=fail_reasons,
+                findings_dir=findings_dir,
+            )
+        )
+        save_tasks_to_plan(plan_path, lines, tasks, wave_log)
+        lines = plan_path.read_text(encoding="utf-8").splitlines()
+        _merge_findings(tasks, findings_dir, merged_findings)
+        _enforce_merged_findings_size_gate(tasks=tasks, findings_dir=findings_dir, merged_path=merged_findings)
+        _write_wave_summaries(findings_dir, wave_summaries)
+
+        # convert needs_replan to pending for next pass (after recording state)
+        for t in tasks:
+            if t.status == "needs_replan":
+                t.status = "pending"
+
+    _merge_findings(tasks, findings_dir, merged_findings)
+    _enforce_merged_findings_size_gate(tasks=tasks, findings_dir=findings_dir, merged_path=merged_findings)
+    _write_wave_summaries(findings_dir, wave_summaries)
+    blocked = [t.id for t in tasks if t.status == "blocked"]
+    pending = [t.id for t in tasks if t.status in ("pending", "running", "in_progress", "needs_replan")]
+    if blocked or pending:
+        _append_log(
+            log_file,
+            [
+                "=== exit 1 (incomplete) ===",
+                f"  blocked: {blocked!r}",
+                f"  pending: {pending!r}",
+            ],
+        )
+        return 1
+    _append_log(log_file, ["=== exit 0 (all steps done) ==="])
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description="Run deep-research plan in dependency-aware parallel waves.")
+    p.add_argument("--plan", default="skills/deep-research/plan.md")
+    p.add_argument("--findings-dir", default="skills/deep-research/findings")
+    p.add_argument("--merged-findings", default="skills/deep-research/findings.md")
+    p.add_argument("--scope", default="default", choices=["default", "mid_platform", "forum", "news"])
+    p.add_argument("--max-parallel", type=int, default=None)
+    p.add_argument("--retry-limit", type=int, default=None)
+    p.add_argument("--max-waves", type=int, default=20)
+    p.add_argument("--rewrite-count", type=int, default=3)
+    p.add_argument(
+        "--rewrite-policy",
+        default="plan_first",
+        choices=["auto_only", "plan_first", "plan_only"],
+        help="Rewrite order policy when R1 needs fallback.",
+    )
+    p.add_argument("--min-results", type=int, default=3)
+    p.add_argument("--min-domains", type=int, default=2)
+    p.add_argument("--disable-broad-fallback", action="store_true")
+    p.add_argument("--query-timeout-seconds", type=float, default=300.0)
+    p.add_argument("--progress-interval-seconds", type=float, default=10.0)
+    p.add_argument("--slow-step-threshold-seconds", type=float, default=10.0)
+    p.add_argument("--require-parallel", dest="require_parallel", action="store_true", default=True)
+    p.add_argument("--allow-serial", dest="require_parallel", action="store_false")
+    p.add_argument(
+        "--log-file",
+        default=None,
+        help="Append executor diagnostics to this file (default: findings-dir/.parallel_executor/run-<utc>.log)",
+    )
+    p.add_argument("--no-log", action="store_true", help="Disable file logging")
+    return p
+
+
+async def _amain() -> int:
+    args = build_parser().parse_args()
+    findings_dir = Path(args.findings_dir)
+    if args.no_log:
+        log_file: Path | None = None
+    elif args.log_file:
+        log_file = Path(args.log_file)
+    else:
+        log_file = _default_log_path(findings_dir)
+    if log_file is not None:
+        msg = f"parallel executor log: {log_file.resolve()}"
+        # stdout: visible when the host only surfaces stdout or truncates middle of combined output
+        print(msg)
+        print(msg, file=sys.stderr)
+    return await run_parallel_plan(
+        plan_path=Path(args.plan),
+        findings_dir=findings_dir,
+        merged_findings=Path(args.merged_findings),
+        scope=args.scope,
+        max_parallel_override=args.max_parallel,
+        retry_limit_override=args.retry_limit,
+        max_waves=max(1, int(args.max_waves)),
+        require_parallel=bool(args.require_parallel),
+        log_file=log_file,
+        rewrite_count=max(1, int(args.rewrite_count)),
+        rewrite_policy=str(args.rewrite_policy or "auto_only").strip().lower() or "auto_only",
+        min_results=max(1, int(args.min_results)),
+        min_domains=max(1, int(args.min_domains)),
+        enable_broad_fallback=not bool(args.disable_broad_fallback),
+        query_timeout_seconds=max(10.0, float(args.query_timeout_seconds)),
+        progress_interval_seconds=max(1.0, float(args.progress_interval_seconds)),
+        slow_step_threshold_seconds=max(1.0, float(args.slow_step_threshold_seconds)),
+    )
+
+
+def main() -> None:
+    raise SystemExit(asyncio.run(_amain()))
+
+
+if __name__ == "__main__":
+    main()

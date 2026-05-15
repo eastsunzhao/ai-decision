@@ -1,0 +1,124 @@
+pipeline {
+  agent any
+
+  options {
+    disableConcurrentBuilds()
+    timestamps()
+    timeout(time: 30, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '30'))
+  }
+
+  environment {
+    // Local deploy path on Jenkins host
+    DEPLOY_PATH = '/home/u9000/tavily_search_nanobot-dev'
+
+    // Local deploy script path on Jenkins host
+    DEPLOY_SCRIPT = 'scripts/deploy/deploy.sh'
+
+    // Package name for this build
+    PACKAGE_NAME = "release-${BUILD_NUMBER}.tar.gz"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Branch Guard') {
+      steps {
+        script {
+          // In non-multibranch pipeline jobs Jenkins often checks out detached HEAD.
+          // Prefer Jenkins-provided env branch info before falling back to git.
+          def branchCandidates = [
+            env.BRANCH_NAME,
+            env.GIT_LOCAL_BRANCH,
+            env.GIT_BRANCH
+          ].findAll { it != null && it.trim() }
+
+          def branchName = ''
+          if (!branchCandidates.isEmpty()) {
+            branchName = branchCandidates[0].trim()
+          } else {
+            branchName = sh(
+              script: "git rev-parse --abbrev-ref HEAD",
+              returnStdout: true
+            ).trim()
+          }
+
+          // Normalize values like "origin/dev" or "refs/heads/dev" to "dev".
+          if (branchName.contains('/')) {
+            branchName = branchName.tokenize('/').last()
+          }
+
+          echo "Current branch (normalized): ${branchName}"
+          if (branchName != 'dev') {
+            error("This pipeline only deploys branch 'dev'. Current normalized branch: ${branchName}")
+          }
+        }
+      }
+    }
+
+    stage('Build') {
+      steps {
+        sh '''
+          set -eux
+          STAGE_START_TS="$(date +%s)"
+          # Keep build stage independent from host python interpreter.
+          # Python runtime checks now happen in scripts/deploy/deploy.sh using NB_PYTHON.
+          bash -n scripts/deploy/deploy.sh scripts/deploy/start.sh scripts/deploy/stop.sh scripts/deploy/restart.sh
+          test -f web/app.py
+          test -f web/run_bot.py
+          STAGE_END_TS="$(date +%s)"
+          echo "[timing] Build stage took $((STAGE_END_TS - STAGE_START_TS))s"
+        '''
+      }
+    }
+
+    stage('Package') {
+      steps {
+        sh '''
+          set -eux
+          STAGE_START_TS="$(date +%s)"
+          # Archive only git-tracked files to avoid workspace mutation races.
+          # Exclude large demo media not required by dev runtime.
+          git ls-files -z | tar --exclude='nanobot/case/*.gif' --null -T - -czf "${PACKAGE_NAME}"
+          ls -lh "${PACKAGE_NAME}"
+          STAGE_END_TS="$(date +%s)"
+          echo "[timing] Package stage took $((STAGE_END_TS - STAGE_START_TS))s"
+        '''
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        sh '''
+          set -eux
+          STAGE_START_TS="$(date +%s)"
+          mkdir -p "${DEPLOY_PATH}"
+          cp -f "${PACKAGE_NAME}" "${DEPLOY_PATH}/${PACKAGE_NAME}"
+          chmod +x "${DEPLOY_SCRIPT}"
+          export BUILD_ID="${BUILD_NUMBER}"
+          export PACKAGE_PATH="${DEPLOY_PATH}/${PACKAGE_NAME}"
+          export REMOTE_BASE="${DEPLOY_PATH}"
+          bash "${DEPLOY_SCRIPT}"
+          STAGE_END_TS="$(date +%s)"
+          echo "[timing] Deploy stage took $((STAGE_END_TS - STAGE_START_TS))s"
+        '''
+      }
+    }
+  }
+
+  post {
+    success {
+      echo 'Deploy succeeded on dev branch.'
+    }
+    failure {
+      echo 'Deploy failed. Check build logs and remote deploy script output.'
+    }
+    always {
+      cleanWs(deleteDirs: true, notFailBuild: true)
+    }
+  }
+}

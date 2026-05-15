@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+.venv/
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
+**/.DS_Store
+/runtime/
+**/.parallel_executor/
+/tmp/
+/tmp_codex_test/
+/其它产品/
+/code_review/
+# pytest temporary directories in repo root
+/.tmp_pytest*/
+/__trash/
+/new_nanobot_version/
+/data_source_search_webUI/
+/nanobot_deepseek_trace/tracelog/

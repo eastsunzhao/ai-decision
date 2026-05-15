@@ -1,0 +1,54 @@
+{
+  "agents": {
+    "defaults": {
+      "workspace": "/home/u9000/tavily_search_nanobot-dev/current",
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "max_tool_iterations": 120,
+      "disabled_skills": [
+        "clawhub",
+        "cron",
+        "github",
+        "memory",
+        "skill-creator",
+        "tmux",
+        "weather"
+      ]
+    }
+  },
+  "providers": {
+    "custom": {
+      "api_key": "sk-kimi-HvHMis6Qc5DNzMUBRWIPoXHhfPdIlDwiulv0Sus0FJnyzdxnpEn7KGZ5iLcsOeZa",
+      "api_base": "https://api.kimi.com/coding/v1",
+      "extra_headers": {
+        "User-Agent": "KimiCLI/0.77"
+      }
+    },
+    "azure_openai": {
+      "model-this-is-comment":"gpt-5.1-1113",
+      "provider-this-is-comment":"azure_openai",
+      "api_key": "sullivan-gptn-ds01wu3-251019",
+      "api_base": "http://pub1.aop.meritg.cn:43265/",
+      "api_version": "2024-12-01-preview"
+    },
+    "deepseek": {
+      "model-this-is-comment":"deepseek-chat",
+      "provider-this-is-comment":"deepseek",
+      "api_key": "sk-856fa899c0fa4d10821fec66e6d1da5b"
+    }
+  },
+  "tools": {
+    "exec": {
+      "tool_call_exec_output_enabled": true
+    },
+    "web": {
+      "search": {
+        "provider": "jina",
+        "api_key": "jina_41ae3d314e8248e8aa31b4b9284877caiLWEK4irXPlsEVRLpEA5lb9cjhPW"
+      }
+    }
+  },
+  "channels": {
+    "send_tool_hints": true
+  }
+}
