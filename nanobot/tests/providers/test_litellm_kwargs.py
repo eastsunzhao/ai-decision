@@ -362,3 +362,28 @@ def test_openai_model_passthrough() -> None:
             spec=spec,
         )
     assert provider.get_default_model() == "gpt-4o"
+
+
+def test_custom_gpt5_uses_max_completion_tokens() -> None:
+    """GPT-5 style custom endpoints require max_completion_tokens."""
+    spec = find_by_name("custom")
+    with patch("nanobot.providers.openai_compat_provider.AsyncOpenAI"):
+        provider = OpenAICompatProvider(
+            api_key="sk-test-key",
+            api_base="https://example.test/openai/v1",
+            default_model="gpt-5.4-2026-03-05",
+            spec=spec,
+        )
+
+    kwargs = provider._build_kwargs(
+        messages=[{"role": "user", "content": "hello"}],
+        tools=None,
+        model=None,
+        max_tokens=1234,
+        temperature=0.1,
+        reasoning_effort=None,
+        tool_choice=None,
+    )
+
+    assert kwargs["max_completion_tokens"] == 1234
+    assert "max_tokens" not in kwargs

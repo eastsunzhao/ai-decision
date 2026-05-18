@@ -3,8 +3,10 @@ set -euo pipefail
 
 REMOTE_BASE="${REMOTE_BASE:-/home/u9000/tavily_search_nanobot-dev}"
 CURRENT_LINK="${REMOTE_BASE}/current"
-VENV_DIR="${VENV_DIR:-${REMOTE_BASE}/.venv}"
-NB_PYTHON="${VENV_DIR}/bin/python"
+CONDA_ENV_NAME="${CONDA_ENV_NAME:-conda_python311_14}"
+CONDA_ENV_DIR="${CONDA_ENV_DIR:-/opt/anaconda3/envs/${CONDA_ENV_NAME}}"
+VENV_DIR="${VENV_DIR:-${CONDA_ENV_DIR}}"
+NB_PYTHON="${NB_PYTHON:-${VENV_DIR}/bin/python}"
 PID_FILE="${REMOTE_BASE}/run/web.pid"
 LOG_FILE="${REMOTE_BASE}/logs/web.log"
 WEB_HOST="${WEB_HOST:-0.0.0.0}"
@@ -22,7 +24,7 @@ fi
 
 cd "${CURRENT_LINK}"
 if [[ ! -x "${NB_PYTHON}" ]]; then
-  echo "[start] python not found in venv: ${NB_PYTHON}" >&2
+  echo "[start] python not found in configured environment: ${NB_PYTHON}" >&2
   exit 1
 fi
 
@@ -35,7 +37,8 @@ nohup env \
   WEB_HOST="${WEB_HOST}" WEB_PORT="${WEB_PORT}" \
   NB_PYTHON="${NB_PYTHON}" \
   WEB_POSIX_PYTHON="${NB_PYTHON}" \
-  VIRTUAL_ENV="${VENV_DIR}" \
+  CONDA_DEFAULT_ENV="${CONDA_ENV_NAME}" \
+  CONDA_PREFIX="${VENV_DIR}" \
   PATH="${VENV_DIR}/bin:${PATH}" \
   PYTHONPATH="${CURRENT_LINK}/nanobot${PYTHONPATH:+:${PYTHONPATH}}" \
   "${NB_PYTHON}" web/app.py >> "${LOG_FILE}" 2>&1 &

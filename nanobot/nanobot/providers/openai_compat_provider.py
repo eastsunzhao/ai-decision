@@ -518,6 +518,14 @@ class OpenAICompatProvider(LLMProvider):
         name = model_name.lower()
         return not any(token in name for token in ("gpt-5", "o1", "o3", "o4"))
 
+    @staticmethod
+    def _uses_max_completion_tokens(model_name: str, spec: "ProviderSpec | None") -> bool:
+        """Return True when chat completions should use max_completion_tokens."""
+        if spec and getattr(spec, "supports_max_completion_tokens", False):
+            return True
+        name = model_name.lower()
+        return any(token in name for token in ("gpt-5", "o1", "o3", "o4"))
+
     def _build_kwargs(
         self,
         messages: list[dict[str, Any]],
@@ -553,7 +561,7 @@ class OpenAICompatProvider(LLMProvider):
         if self._supports_temperature(model_name, reasoning_effort):
             kwargs["temperature"] = temperature
 
-        if spec and getattr(spec, "supports_max_completion_tokens", False):
+        if self._uses_max_completion_tokens(model_name, spec):
             kwargs["max_completion_tokens"] = max(1, max_tokens)
         else:
             kwargs["max_tokens"] = max(1, max_tokens)

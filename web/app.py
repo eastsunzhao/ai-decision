@@ -28,6 +28,7 @@ from typing import Any
 from flask import Flask, Response, jsonify, request, send_file
 
 if __package__:
+    from .logging_config import configure_logging
     from .composer_prefs import merge_composer_prefs_for_turn
     from .run_bot import BotRunner
     from .runtime_store import (
@@ -63,6 +64,7 @@ if __package__:
         valid_workspace_name,
     )
 else:
+    from logging_config import configure_logging
     from composer_prefs import merge_composer_prefs_for_turn
     from run_bot import BotRunner
     from runtime_store import (
@@ -98,6 +100,8 @@ else:
         valid_workspace_name,
     )
 
+
+APP_LOG_FILE = configure_logging(Path(__file__).resolve().parents[1])
 
 # These constants shape how the browser UI stores and streams state.
 JOB_TTL = timedelta(minutes=10)

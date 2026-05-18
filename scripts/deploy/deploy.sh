@@ -15,13 +15,16 @@ UV_BIN="${UV_BIN:-${UV_INSTALL_DIR}/bin/uv}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.14}"
 PIP_DEFAULT_TIMEOUT="${PIP_DEFAULT_TIMEOUT:-120}"
 PIP_RETRIES="${PIP_RETRIES:-8}"
+CREATE_VENV_IF_MISSING="${CREATE_VENV_IF_MISSING:-0}"
 
 RELEASES_DIR="${REMOTE_BASE}/releases"
 RELEASE_DIR="${RELEASES_DIR}/${BUILD_ID}"
 CURRENT_LINK="${REMOTE_BASE}/current"
 PREV_LINK="${REMOTE_BASE}/previous"
-VENV_DIR="${VENV_DIR:-${REMOTE_BASE}/.venv}"
-NB_PYTHON="${VENV_DIR}/bin/python"
+CONDA_ENV_NAME="${CONDA_ENV_NAME:-conda_python311_14}"
+CONDA_ENV_DIR="${CONDA_ENV_DIR:-/opt/anaconda3/envs/${CONDA_ENV_NAME}}"
+VENV_DIR="${VENV_DIR:-${CONDA_ENV_DIR}}"
+NB_PYTHON="${NB_PYTHON:-${VENV_DIR}/bin/python}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:5005/}"
 # App startup time can fluctuate on busy hosts (venv warmup, imports, IO).
 # Keep a wider default health-check window to avoid false rollback.
@@ -98,35 +101,46 @@ export PATH="${UV_INSTALL_DIR}/bin:${PATH}"
 if [[ -n "${RESOLVED_UV_BIN}" ]]; then
   echo "[deploy] using uv: ${RESOLVED_UV_BIN}"
 else
-  echo "[deploy] uv not available, fallback to python3 -m venv + pip"
+  echo "[deploy] uv not available, using configured Python environment with pip"
 fi
 
 VENV_CREATED=0
 if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
-  echo "[deploy] creating venv with Python ${PYTHON_VERSION}: ${VENV_DIR}"
-  if [[ -n "${RESOLVED_UV_BIN}" ]]; then
-    "${RESOLVED_UV_BIN}" venv --python "${PYTHON_VERSION}" "${VENV_DIR}"
+  if [[ "${CREATE_VENV_IF_MISSING}" == "1" ]]; then
+    echo "[deploy] creating venv with Python ${PYTHON_VERSION}: ${VENV_DIR}"
+    if [[ -n "${RESOLVED_UV_BIN}" ]]; then
+      "${RESOLVED_UV_BIN}" venv --python "${PYTHON_VERSION}" "${VENV_DIR}"
+    else
+      python3 -m venv "${VENV_DIR}"
+    fi
+    VENV_CREATED=1
   else
-    python3 -m venv "${VENV_DIR}"
+    echo "[deploy] configured Python environment not found: ${VENV_DIR}/bin/python" >&2
+    echo "[deploy] create/activate Conda env '${CONDA_ENV_NAME}' or set NB_PYTHON/VENV_DIR." >&2
+    exit 1
   fi
-  VENV_CREATED=1
 fi
 
 ensure_pip_in_venv() {
   if "${VENV_DIR}/bin/python" -m pip --version >/dev/null 2>&1; then
     return 0
   fi
-  echo "[deploy] pip missing in venv, bootstrapping with ensurepip"
+  echo "[deploy] pip missing in configured Python environment, bootstrapping with ensurepip"
   if "${VENV_DIR}/bin/python" -m ensurepip --upgrade >/dev/null 2>&1; then
     "${VENV_DIR}/bin/python" -m pip install -U pip >/dev/null 2>&1 || true
     return 0
   fi
-  echo "[deploy] ensurepip unavailable, recreating venv with system python3"
+  if [[ "${CREATE_VENV_IF_MISSING}" != "1" ]]; then
+    echo "[deploy] ensurepip unavailable in configured environment: ${VENV_DIR}" >&2
+    echo "[deploy] install pip in Conda env '${CONDA_ENV_NAME}' or set CREATE_VENV_IF_MISSING=1 with a writable VENV_DIR." >&2
+    exit 1
+  fi
+  echo "[deploy] ensurepip unavailable, recreating venv with system python3: ${VENV_DIR}"
   rm -rf "${VENV_DIR}"
   python3 -m venv "${VENV_DIR}"
   "${VENV_DIR}/bin/python" -m ensurepip --upgrade >/dev/null 2>&1 || true
   if ! "${VENV_DIR}/bin/python" -m pip --version >/dev/null 2>&1; then
-    echo "[deploy] pip bootstrap failed in venv: ${VENV_DIR}" >&2
+    echo "[deploy] pip bootstrap failed in environment: ${VENV_DIR}" >&2
     exit 1
   fi
 }
@@ -161,7 +175,8 @@ verify_interpreter_consistency() {
   NB_PYTHON="${actual_python}"
   export NB_PYTHON
   export WEB_POSIX_PYTHON="${NB_PYTHON}"
-  export VIRTUAL_ENV="${VENV_DIR}"
+  export CONDA_DEFAULT_ENV="${CONDA_ENV_NAME}"
+  export CONDA_PREFIX="${VENV_DIR}"
 }
 
 pip_install_with_retry() {
